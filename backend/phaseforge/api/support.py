@@ -20,7 +20,7 @@ from PIL import Image
 
 from ..io import audio_io, container, image_io
 
-MAX_UPLOAD_BYTES = 32 * 1024 * 1024
+MAX_UPLOAD_BYTES = None
 MAX_DECOMPRESSED_BYTES = 512 * 1024 * 1024
 MAX_IMAGE_PIXELS = 1024 * 1024
 MAX_AUDIO_SAMPLES = 48_000 * 60
@@ -30,16 +30,17 @@ _CHUNK = 64 * 1024
 
 
 async def read_upload(upload: UploadFile, limit=MAX_UPLOAD_BYTES):
-    """Read an upload into memory, refusing anything over ``limit``.
+    """Read an upload into memory.
 
-    Read in chunks rather than calling ``.read()`` -- the point is to stop
-    before a huge body is fully buffered, not after.
+    ``limit`` remains available to callers that need a route-specific cap, but
+    uploads are unlimited by default. Reading in chunks avoids requiring one
+    additional contiguous allocation while receiving the file.
     """
     chunks = []
     total = 0
     while chunk := await upload.read(_CHUNK):
         total += len(chunk)
-        if total > limit:
+        if limit is not None and total > limit:
             raise HTTPException(413, f"file exceeds the {limit // (1024 * 1024)} MB limit")
         chunks.append(chunk)
     if not chunks:

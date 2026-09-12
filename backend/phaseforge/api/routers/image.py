@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
+from ...core import transform
 from ...image import drpe, freq_edit, watermark
 from ...io import image_io
 from .. import support
@@ -11,16 +12,18 @@ router = APIRouter(prefix="/api/image", tags=["image"])
 
 @router.post("/encrypt")
 async def encrypt(file: UploadFile = File(...), passphrase: str = Form(...),
-                  greyscale: bool = Form(False)):
+                  greyscale: bool = Form(False), backend: str = Form("numpy")):
     """Encrypt an image, returning a ``.npz`` ciphertext container."""
     image, mode = support.decode_image(await support.read_upload(file), greyscale)
-    ciphertext, metadata = drpe.encrypt(image, passphrase)
+    with transform.using_backend(backend):
+        ciphertext, metadata = drpe.encrypt(image, passphrase)
     metadata["mode"] = mode
     return support.container_response(ciphertext, metadata, "cipher.npz")
 
 
 @router.post("/decrypt")
-async def decrypt(file: UploadFile = File(...), passphrase: str = Form(...)):
+async def decrypt(file: UploadFile = File(...), passphrase: str = Form(...),
+                  backend: str = Form("numpy")):
     """Decrypt a ciphertext container back to a PNG.
 
     A wrong passphrase does not error -- DRPE has no integrity check, so it
@@ -28,7 +31,8 @@ async def decrypt(file: UploadFile = File(...), passphrase: str = Form(...)):
     """
     ciphertext, metadata = support.decode_container(await support.read_upload(file))
     support.expect_kind(metadata, "image")
-    image = drpe.decrypt(ciphertext, passphrase, metadata)
+    with transform.using_backend(backend):
+        image = drpe.decrypt(ciphertext, passphrase, metadata)
     return support.image_response(image, "restored.png", metadata.get("mode"))
 
 

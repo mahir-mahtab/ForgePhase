@@ -4,10 +4,11 @@ React interface for the `phaseforge` Fourier-domain image and audio security
 toolkit. Two workspaces, one per domain, covering every command the Python CLI
 exposes.
 
-**The backend is not connected.** Every service call is a typed stub that
-resolves with a `not-implemented` result, which the UI renders as a calm
-"Backend not connected" panel alongside the equivalent CLI invocation. Forms,
-validation, cancellation, loading, error and result states are all live.
+Image and audio encryption/decryption are connected to the Python API. The
+remaining service calls are typed stubs that resolve with a `not-implemented`
+result, which the UI renders as a calm "Backend not connected" panel alongside
+the equivalent CLI invocation. Forms, validation, cancellation, loading, error
+and result states are all live.
 
 ## Stack
 
@@ -70,16 +71,15 @@ flag and covers both `numpy` and `custom`.
 
 ## Wiring up the backend
 
-Three files, and nothing above them changes:
+The four encryption/decryption operations demonstrate the connection pattern:
 
 1. **`src/services/types.ts`** already describes every request and response.
    Each field carries the CLI flag it corresponds to.
-2. **`src/services/client.ts`** holds `notImplemented()` (the current stub) and
-   `postForm()` (a working reference implementation, unused for now). Endpoint
-   paths mirror the CLI command names: `POST /api/image-encrypt`.
+2. **`src/services/client.ts`** holds the multipart HTTP helpers and
+   `notImplemented()` for operations that remain disconnected.
 3. **`src/services/imageService.ts`** and **`audioService.ts`** have one
-   function per command. Replace each `return notImplemented('x', signal)` with
-   a `postForm` call that packs the request into a `FormData`.
+   function per command. Connected operations pack their requests into
+   `FormData`; the remaining functions still call `notImplemented()`.
 
 `AbortSignal` is already threaded through every layer, so cancellation works
 the moment a real request exists.

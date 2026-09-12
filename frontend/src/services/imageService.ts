@@ -1,13 +1,11 @@
 /**
  * Image-domain operations.
  *
- * One function per `phaseforge` image command. Each is a do-nothing stub: it
- * validates nothing, sends nothing, and resolves with `not-implemented`. The
- * signatures are the real contract, so wiring the backend means replacing the
- * `notImplemented(...)` body with `postForm(...)` and nothing else.
+ * Encryption and decryption use the Python API. The remaining operations stay
+ * as deliberate placeholders until they are connected separately.
  */
 
-import { notImplemented } from '@/services/client'
+import { notImplemented, postArtifact } from '@/services/client'
 import type {
   ArtifactResult,
   AttackReportRequest,
@@ -35,14 +33,46 @@ export const IMAGE_DEFAULTS = {
 export function encryptImage(
   request: ImageEncryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  return notImplemented('image-encrypt', request.signal)
+  const body = new FormData()
+  body.set('file', request.input)
+  body.set('passphrase', request.passphrase)
+  body.set('greyscale', String(request.greyscale))
+  body.set('backend', request.backend)
+
+  return postArtifact(
+    'image-encrypt',
+    'image/encrypt',
+    body,
+    'cipher.npz',
+    [
+      { label: 'Source', value: request.input.name },
+      { label: 'Backend', value: request.backend },
+      { label: 'Colour', value: request.greyscale ? 'greyscale' : 'original' },
+    ],
+    request.signal,
+  )
 }
 
 /** `phaseforge image-decrypt` -- invert DRPE from a `.npz` container. */
 export function decryptImage(
   request: ImageDecryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  return notImplemented('image-decrypt', request.signal)
+  const body = new FormData()
+  body.set('file', request.container)
+  body.set('passphrase', request.passphrase)
+  body.set('backend', request.backend)
+
+  return postArtifact(
+    'image-decrypt',
+    'image/decrypt',
+    body,
+    'restored.png',
+    [
+      { label: 'Container', value: request.container.name },
+      { label: 'Backend', value: request.backend },
+    ],
+    request.signal,
+  )
 }
 
 /** `phaseforge watermark-embed` -- write a mark into the magnitude spectrum. */

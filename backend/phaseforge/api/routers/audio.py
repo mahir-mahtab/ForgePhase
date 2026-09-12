@@ -3,6 +3,7 @@
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ...audio import denoise, drpe, enhance
+from ...core import transform
 from ...core.padding import is_power_of_two
 from .. import support
 
@@ -11,26 +12,30 @@ router = APIRouter(prefix="/api/audio", tags=["audio"])
 
 @router.post("/encrypt")
 async def encrypt(file: UploadFile = File(...), passphrase: str = Form(...),
-                  block_size: int = Form(drpe.DEFAULT_BLOCK_SIZE)):
+                  block_size: int = Form(drpe.DEFAULT_BLOCK_SIZE),
+                  backend: str = Form("numpy")):
     """Encrypt audio block by block, returning a ``.npz`` ciphertext container."""
     if not is_power_of_two(block_size):
         raise HTTPException(400, f"block_size must be a power of two, got {block_size}")
 
     signal, sample_rate = support.decode_audio(await support.read_upload(file))
-    ciphertext, metadata = drpe.encrypt(signal, passphrase, sample_rate,
-                                        block_size=block_size)
+    with transform.using_backend(backend):
+        ciphertext, metadata = drpe.encrypt(signal, passphrase, sample_rate,
+                                            block_size=block_size)
     return support.container_response(ciphertext, metadata, "cipher.npz")
 
 
 @router.post("/decrypt")
-async def decrypt(file: UploadFile = File(...), passphrase: str = Form(...)):
+async def decrypt(file: UploadFile = File(...), passphrase: str = Form(...),
+                  backend: str = Form("numpy")):
     """Decrypt a ciphertext container back to a WAV.
 
     As with images, a wrong passphrase yields noise rather than an error.
     """
     ciphertext, metadata = support.decode_container(await support.read_upload(file))
     support.expect_kind(metadata, "audio")
-    signal = drpe.decrypt(ciphertext, passphrase, metadata)
+    with transform.using_backend(backend):
+        signal = drpe.decrypt(ciphertext, passphrase, metadata)
     return support.audio_response(signal, metadata["sample_rate"], "restored.wav")
 
 

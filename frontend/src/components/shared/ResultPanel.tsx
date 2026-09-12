@@ -1,5 +1,5 @@
 import { Download } from 'lucide-react'
-import { memo } from 'react'
+import { memo, useEffect } from 'react'
 
 import {
   ErrorState,
@@ -27,6 +27,16 @@ function ResultPanelImpl({
   idleHint,
   cliCommand,
 }: ResultPanelProps) {
+  const artifactUrl =
+    state.phase === 'ok' ? state.data.artifact.url : null
+
+  useEffect(
+    () => () => {
+      if (artifactUrl?.startsWith('blob:')) URL.revokeObjectURL(artifactUrl)
+    },
+    [artifactUrl],
+  )
+
   // Early returns keep each branch flat and let the success path below assume
   // a resolved artifact without any further narrowing.
   if (state.phase === 'idle') return <IdleState hint={idleHint} tone={tone} />

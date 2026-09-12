@@ -1,11 +1,11 @@
 /**
  * Audio-domain operations.
  *
- * Mirrors `imageService`: one function per `phaseforge` audio command, each a
- * do-nothing stub resolving with `not-implemented`.
+ * Encryption and decryption use the Python API. The remaining operations stay
+ * as deliberate placeholders until they are connected separately.
  */
 
-import { notImplemented } from '@/services/client'
+import { notImplemented, postArtifact } from '@/services/client'
 import type {
   ArtifactResult,
   AttackReportRequest,
@@ -33,14 +33,46 @@ export const BLOCK_SIZES = [1024, 2048, 4096, 8192, 16384] as const
 export function encryptAudio(
   request: AudioEncryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  return notImplemented('audio-encrypt', request.signal)
+  const body = new FormData()
+  body.set('file', request.input)
+  body.set('passphrase', request.passphrase)
+  body.set('block_size', String(request.blockSize))
+  body.set('backend', request.backend)
+
+  return postArtifact(
+    'audio-encrypt',
+    'audio/encrypt',
+    body,
+    'cipher.npz',
+    [
+      { label: 'Source', value: request.input.name },
+      { label: 'Backend', value: request.backend },
+      { label: 'Block size', value: String(request.blockSize) },
+    ],
+    request.signal,
+  )
 }
 
 /** `phaseforge audio-decrypt` -- invert block DRPE from a `.npz` container. */
 export function decryptAudio(
   request: AudioDecryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  return notImplemented('audio-decrypt', request.signal)
+  const body = new FormData()
+  body.set('file', request.container)
+  body.set('passphrase', request.passphrase)
+  body.set('backend', request.backend)
+
+  return postArtifact(
+    'audio-decrypt',
+    'audio/decrypt',
+    body,
+    'restored.wav',
+    [
+      { label: 'Container', value: request.container.name },
+      { label: 'Backend', value: request.backend },
+    ],
+    request.signal,
+  )
 }
 
 /** `phaseforge denoise` -- spectral subtraction against an estimated floor. */

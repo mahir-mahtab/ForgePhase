@@ -1,14 +1,10 @@
-/**
- * Transport stub.
- *
- * The Python backend is not connected yet. Every service routes through
- * `notImplemented`, which resolves -- after a short, honest pause so loading
- * states are exercised -- with a `not-implemented` envelope. When the HTTP
- * layer lands, only this file and the call sites inside the two service
- * modules change; component code keeps the same contract.
- */
+/** Shared transport helpers for connected and placeholder operations. */
 
-import type { OperationId, ServiceResult } from '@/services/types'
+import type {
+  ArtifactResult,
+  OperationId,
+  ServiceResult,
+} from '@/services/types'
 
 /** Same-origin by default; Vite proxies `/api` to the Python process. */
 export const API_BASE_URL: string =
@@ -105,4 +101,61 @@ export async function postForm<T>(
   }
 
   return { status: 'ok', data: (await response.json()) as T }
+}
+
+function responseFilename(response: Response, fallback: string): string {
+  const disposition = response.headers.get('Content-Disposition')
+  const encoded = disposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  if (encoded) return decodeURIComponent(encoded.replace(/^"|"$/g, ''))
+
+  return disposition?.match(/filename="?([^";]+)"?/i)?.[1] ?? fallback
+}
+
+async function errorMessage(response: Response): Promise<string> {
+  const fallback = `Request failed (HTTP ${response.status}).`
+
+  try {
+    const body = (await response.json()) as { detail?: unknown }
+    return typeof body.detail === 'string' ? body.detail : fallback
+  } catch {
+    return fallback
+  }
+}
+
+/** POST multipart form data and expose a binary response as a download. */
+export async function postArtifact(
+  operation: OperationId,
+  endpoint: string,
+  body: FormData,
+  fallbackName: string,
+  details: ArtifactResult['details'],
+  signal?: AbortSignal,
+): Promise<ServiceResult<ArtifactResult>> {
+  const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+    method: 'POST',
+    body,
+    signal,
+  })
+
+  if (!response.ok) {
+    return {
+      status: 'error',
+      operation,
+      message: await errorMessage(response),
+    }
+  }
+
+  const blob = await response.blob()
+  return {
+    status: 'ok',
+    data: {
+      artifact: {
+        name: responseFilename(response, fallbackName),
+        mimeType: blob.type || 'application/octet-stream',
+        byteLength: blob.size,
+        url: URL.createObjectURL(blob),
+      },
+      details,
+    },
+  }
 }
