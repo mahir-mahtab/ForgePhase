@@ -1,8 +1,7 @@
-"""Hand-written DFT/FFT backend.
+"""Hand-written radix-2 FFT backend.
 
-Currently unimplemented. Filling in the four functions below is the only change
-required to run the entire project on a self-written transform -- no module
-outside this file references an FFT implementation directly.
+The four functions below are the only implementation-specific seam in the
+project. No caller references an FFT implementation directly.
 
 Contract every function must satisfy (see ``core.transform`` for the authority):
 
@@ -24,27 +23,47 @@ and neither mixed-radix nor Bluestein is needed.
 these functions are validated against the NumPy reference as soon as they exist.
 """
 
+import numpy as np
+
+
 NAME = "custom"
 
 
-def _not_implemented(name):
-    raise NotImplementedError(
-        f"custom backend: {name}() is not implemented yet. "
-        "See phaseforge/core/backends/custom_backend.py for the required contract."
-    )
-
-
 def fft(x, axis=-1):
-    _not_implemented("fft")
+    return _transform(x, axis, sign=-1.0, inverse=False)
 
 
 def ifft(x, axis=-1):
-    _not_implemented("ifft")
+    return _transform(x, axis, sign=1.0, inverse=True)
 
 
 def fft2(x):
-    _not_implemented("fft2")
+    return fft(fft(x, axis=-1), axis=-2)
 
 
 def ifft2(x):
-    _not_implemented("ifft2")
+    return ifft(ifft(x, axis=-1), axis=-2)
+
+
+def _transform(x, axis, sign, inverse):
+    """Apply a radix-2 Cooley--Tukey transform along one named axis."""
+    values = np.asarray(x, dtype=complex)
+    moved = np.moveaxis(values, axis, -1)
+    result = _radix2(moved, sign)
+    if inverse:
+        result = result / moved.shape[-1]
+    return np.moveaxis(result, -1, axis)
+
+
+def _radix2(values, sign):
+    length = values.shape[-1]
+    if length == 1:
+        return values
+    if length & (length - 1):
+        raise ValueError(f"length must be a power of two, got {length}")
+
+    even = _radix2(values[..., 0::2], sign)
+    odd = _radix2(values[..., 1::2], sign)
+    factor = np.exp(sign * 2j * np.pi * np.arange(length // 2) / length)
+    twiddled = factor * odd
+    return np.concatenate([even + twiddled, even - twiddled], axis=-1)

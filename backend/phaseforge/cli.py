@@ -19,7 +19,7 @@ from .audio import enhance as audio_enhance
 from .core import transform
 from .image import drpe as image_drpe
 from .image import freq_edit, watermark
-from .io import audio_io, container, image_io
+from .io import audio_io, container, image_cipher, image_io
 
 
 def _passphrase(args):
@@ -40,15 +40,21 @@ def cmd_image_encrypt(args):
     image, mode = image_io.load_image(args.input, greyscale=args.greyscale)
     ciphertext, metadata = image_drpe.encrypt(image, _passphrase(args))
     metadata["mode"] = mode
-    container.save_container(args.output, ciphertext, metadata)
-    print(f"encrypted {args.input} -> {args.output} (ciphertext {ciphertext.shape})")
+    real_png, imaginary_png = image_cipher.encode_pair(ciphertext, metadata)
+    with open(args.real_output, "wb") as output:
+        output.write(real_png)
+    with open(args.imaginary_output, "wb") as output:
+        output.write(imaginary_png)
+    print(f"encrypted {args.input} -> {args.real_output}, {args.imaginary_output} "
+          f"(ciphertext {ciphertext.shape})")
 
 
 def cmd_image_decrypt(args):
-    ciphertext, metadata = container.load_container(args.input)
+    with open(args.real_input, "rb") as real_file, open(args.imaginary_input, "rb") as imaginary_file:
+        ciphertext, metadata = image_cipher.decode_pair(real_file.read(), imaginary_file.read())
     image = image_drpe.decrypt(ciphertext, _passphrase(args), metadata)
     image_io.save_image(args.output, image, metadata.get("mode"))
-    print(f"decrypted {args.input} -> {args.output}")
+    print(f"decrypted {args.real_input}, {args.imaginary_input} -> {args.output}")
 
 
 def cmd_audio_encrypt(args):
@@ -92,8 +98,9 @@ def cmd_filter(args):
 
 
 def cmd_spectrum(args):
-    if str(args.input).endswith(".npz"):
-        data, _ = container.load_container(args.input)
+    if args.imaginary:
+        with open(args.input, "rb") as real_file, open(args.imaginary, "rb") as imaginary_file:
+            data, _ = image_cipher.decode_pair(real_file.read(), imaginary_file.read())
     else:
         data, _ = image_io.load_image(args.input)
     image_io.save_image(args.output, freq_edit.spectrum_preview(data, args.gamma))
@@ -117,7 +124,11 @@ def cmd_enhance(args):
 
 
 def cmd_attack_report(args):
-    ciphertext, metadata = container.load_container(args.ciphertext)
+    if args.imaginary:
+        with open(args.ciphertext, "rb") as real_file, open(args.imaginary, "rb") as imaginary_file:
+            ciphertext, metadata = image_cipher.decode_pair(real_file.read(), imaginary_file.read())
+    else:
+        ciphertext, metadata = container.load_container(args.ciphertext)
     if metadata.get("kind") == "audio":
         original, _ = audio_io.load_audio(args.original)
     else:
@@ -164,12 +175,14 @@ def build_parser():
 
     sub = add("image-encrypt", cmd_image_encrypt, "encrypt an image with DRPE")
     sub.add_argument("input")
-    sub.add_argument("output")
+    sub.add_argument("real_output")
+    sub.add_argument("imaginary_output")
     sub.add_argument("--greyscale", action="store_true")
     add_passphrase(sub)
 
-    sub = add("image-decrypt", cmd_image_decrypt, "decrypt a DRPE image container")
-    sub.add_argument("input")
+    sub = add("image-decrypt", cmd_image_decrypt, "decrypt a DRPE image cipher pair")
+    sub.add_argument("real_input")
+    sub.add_argument("imaginary_input")
     sub.add_argument("output")
     add_passphrase(sub)
 
@@ -210,8 +223,9 @@ def build_parser():
     sub.add_argument("--order", type=int, default=2)
 
     sub = add("spectrum", cmd_spectrum, "render a magnitude spectrum as a viewable image")
-    sub.add_argument("input", help="an image, or a .npz ciphertext container")
+    sub.add_argument("input", help="an image or the real cipher PNG")
     sub.add_argument("output")
+    sub.add_argument("--imaginary", help="imaginary cipher PNG when input is encrypted")
     sub.add_argument("--gamma", type=float, default=1.0)
 
     sub = add("denoise", cmd_denoise, "reduce noise by spectral subtraction")
@@ -227,8 +241,9 @@ def build_parser():
     sub.add_argument("--gate-threshold", type=float, default=1.5)
 
     sub = add("attack-report", cmd_attack_report, "measure ciphertext robustness")
-    sub.add_argument("ciphertext", help="an image or audio .npz container")
+    sub.add_argument("ciphertext", help="an audio .npz container or image real PNG")
     sub.add_argument("original", help="the matching plaintext file, for comparison")
+    sub.add_argument("--imaginary", help="imaginary image cipher PNG")
     add_passphrase(sub)
 
     sub = add("kpa-demo", cmd_kpa_demo, "demonstrate the chosen-plaintext break")

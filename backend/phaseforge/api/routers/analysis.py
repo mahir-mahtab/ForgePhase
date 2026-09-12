@@ -16,15 +16,27 @@ class KpaRequest(BaseModel):
 
 
 @router.post("/attack-report")
-async def attack_report(ciphertext: UploadFile = File(...), original: UploadFile = File(...),
-                        passphrase: str = Form(...)):
+async def attack_report(original: UploadFile = File(...), passphrase: str = Form(...),
+                        ciphertext: UploadFile | None = File(None),
+                        real_file: UploadFile | None = File(None),
+                        imaginary_file: UploadFile | None = File(None)):
     """Damage a ciphertext in several ways and report what survives decryption.
 
-    Works for image and audio containers alike; the attack set and metrics are
-    chosen from the container's own metadata.
+    Image reports use a real/imaginary PNG pair. Audio reports continue to use
+    the NPZ container format.
     """
-    cipher_data, metadata = support.decode_container(await support.read_upload(ciphertext))
     payload = await support.read_upload(original)
+    if ciphertext is not None and (real_file is not None or imaginary_file is not None):
+        raise HTTPException(400, "provide either an audio container or an image pair")
+    if ciphertext is not None:
+        cipher_data, metadata = support.decode_container(await support.read_upload(ciphertext))
+    elif real_file is not None and imaginary_file is not None:
+        cipher_data, metadata = support.decode_image_cipher_pair(
+            await support.read_upload(real_file),
+            await support.read_upload(imaginary_file),
+        )
+    else:
+        raise HTTPException(400, "provide an audio container or both image components")
 
     if metadata.get("kind") == "audio":
         reference, _ = support.decode_audio(payload)

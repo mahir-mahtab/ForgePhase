@@ -23,7 +23,7 @@ import type { TransformBackend } from '@/services/types'
 const SPECS = [
   { term: 'Transform', value: '2D FFT' },
   { term: 'Cipher', value: 'DRPE, two masks' },
-  { term: 'Container', value: '.npz' },
+  { term: 'Cipher output', value: 'real + imaginary PNG' },
   { term: 'Known break', value: 'chosen-plaintext' },
 ] as const
 

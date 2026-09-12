@@ -5,35 +5,47 @@ import { FileDropzone } from '@/components/shared/FileDropzone'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { ParamSlider } from '@/components/shared/ParamSlider'
 import { ResultPanel } from '@/components/shared/ResultPanel'
+import { Button } from '@/components/ui/button'
 import { useOperation } from '@/hooks/useOperation'
-import { ACCEPT_CONTAINER, ACCEPT_IMAGE } from '@/lib/accept'
+import { ACCEPT_IMAGE } from '@/lib/accept'
 import { IMAGE_DEFAULTS, renderSpectrum } from '@/services/imageService'
 import type { TransformBackend } from '@/services/types'
 
 const ICON = <Waves className="size-4" aria-hidden />
 
-/** Accepts a plain image or a ciphertext container, exactly as the CLI does. */
-const ACCEPT_EITHER = `${ACCEPT_IMAGE},${ACCEPT_CONTAINER}`
-
 export function SpectrumPanel({ backend }: { backend: TransformBackend }) {
   const [input, setInput] = useState<File | null>(null)
+  const [imaginaryFile, setImaginaryFile] = useState<File | null>(null)
+  const [sourceMode, setSourceMode] = useState<'image' | 'pair'>('image')
   const [gamma, setGamma] = useState<number>(IMAGE_DEFAULTS.spectrumGamma)
   const { state, execute, reset } = useOperation(renderSpectrum)
 
   const isRunning = state.phase === 'running'
-  const canRun = input !== null
+  const canRun = sourceMode === 'image'
+    ? input !== null
+    : input !== null && imaginaryFile !== null
 
   const handleRun = useCallback(() => {
     if (!input) return
-    void execute({ input, gamma, backend })
-  }, [backend, execute, gamma, input])
+    if (sourceMode === 'pair' && !imaginaryFile) return
+    void execute({
+      input,
+      imaginaryFile: sourceMode === 'pair' ? imaginaryFile ?? undefined : undefined,
+      gamma,
+      backend,
+    })
+  }, [backend, execute, gamma, imaginaryFile, input, sourceMode])
 
   const command = [
     'phaseforge --backend',
     backend,
     'spectrum',
     input?.name ?? '<input>',
-    'spectrum.png --gamma',
+    'spectrum.png',
+    ...(sourceMode === 'pair'
+      ? ['--imaginary', imaginaryFile?.name ?? '<cipher-imaginary.png>']
+      : []),
+    '--gamma',
     gamma,
   ].join(' ')
 
@@ -42,11 +54,11 @@ export function SpectrumPanel({ backend }: { backend: TransformBackend }) {
       tone="image"
       icon={ICON}
       title="Magnitude spectrum"
-      description="A raw complex spectrum cannot go into an image tag, so this renders the log-scaled magnitude instead. Point it at a ciphertext container to see that DRPE output really is noise-like."
+      description="A raw complex spectrum cannot go into an image tag, so this renders the log-scaled magnitude instead. Choose an ordinary image or a real/imaginary cipher pair."
       command="spectrum"
       runLabel="Render spectrum"
       canRun={canRun}
-      blockedReason="Pick an image or a .npz container"
+      blockedReason={sourceMode === 'image' ? 'Pick an image' : 'Pick both cipher PNGs'}
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
@@ -60,16 +72,51 @@ export function SpectrumPanel({ backend }: { backend: TransformBackend }) {
         />
       }
     >
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={sourceMode === 'image' ? 'image' : 'outline'}
+          aria-pressed={sourceMode === 'image'}
+          onClick={() => setSourceMode('image')}
+          disabled={isRunning}
+        >
+          Ordinary image
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={sourceMode === 'pair' ? 'image' : 'outline'}
+          aria-pressed={sourceMode === 'pair'}
+          onClick={() => setSourceMode('pair')}
+          disabled={isRunning}
+        >
+          Cipher pair
+        </Button>
+      </div>
       <FileDropzone
-        label="Image or container"
-        hint="image or .npz"
+        label={sourceMode === 'image' ? 'Source image' : 'Real cipher component'}
+        hint={sourceMode === 'image' ? 'image' : 'cipher-real.png'}
         kind="image"
-        accept={ACCEPT_EITHER}
+        accept={ACCEPT_IMAGE}
         tone="image"
         file={input}
         onFileChange={setInput}
         disabled={isRunning}
       />
+
+      {sourceMode === 'pair' ? (
+        <FileDropzone
+          label="Imaginary cipher component"
+          hint="cipher-imaginary.png"
+          kind="image"
+          accept={ACCEPT_IMAGE}
+          tone="image"
+          file={imaginaryFile}
+          onFileChange={setImaginaryFile}
+          disabled={isRunning}
+        />
+      ) : null}
 
       <ParamSlider
         label="Display gamma"

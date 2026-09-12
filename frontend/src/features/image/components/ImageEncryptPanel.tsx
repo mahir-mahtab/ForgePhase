@@ -2,9 +2,9 @@ import { Lock } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
+import { CipherPairResultPanel } from '@/components/shared/CipherPairResultPanel'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { PassphraseField } from '@/components/shared/PassphraseField'
-import { ResultPanel } from '@/components/shared/ResultPanel'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useOperation } from '@/hooks/useOperation'
@@ -30,14 +30,14 @@ export function ImageEncryptPanel({ backend }: { backend: TransformBackend }) {
 
   const command = `phaseforge --backend ${backend} image-encrypt ${
     file?.name ?? '<input>'
-  } cipher.npz${greyscale ? ' --greyscale' : ''}`
+  } cipher-real.png cipher-imaginary.png${greyscale ? ' --greyscale' : ''}`
 
   return (
     <OperationShell
       tone="image"
       icon={ICON}
       title="Double random phase encryption"
-      description="Two passphrase-derived random-phase masks, one in the spatial domain and one in the frequency domain. The output is a complex ciphertext container."
+      description="Two passphrase-derived random-phase masks, one in the spatial domain and one in the frequency domain. The output is a real and imaginary PNG pair."
       command="image-encrypt"
       runLabel="Encrypt image"
       canRun={canRun}
@@ -47,10 +47,9 @@ export function ImageEncryptPanel({ backend }: { backend: TransformBackend }) {
       onRun={handleRun}
       onReset={reset}
       result={
-        <ResultPanel
+        <CipherPairResultPanel
           state={state}
-          tone="image"
-          idleHint="The ciphertext container and a preview of its magnitude spectrum will appear here."
+          idleHint="The real and imaginary ciphertext previews will appear here."
           cliCommand={command}
         />
       }
@@ -76,7 +75,7 @@ export function ImageEncryptPanel({ backend }: { backend: TransformBackend }) {
           <Label htmlFor="image-encrypt-greyscale">Collapse to greyscale</Label>
           <p className="mt-1 text-xs text-muted-foreground">
             One channel instead of three. Roughly a third of the work, and the
-            container is a third of the size.
+            two-component output is smaller.
           </p>
         </div>
         <Switch

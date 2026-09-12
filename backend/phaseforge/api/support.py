@@ -18,7 +18,7 @@ from fastapi import HTTPException, UploadFile
 from fastapi.responses import Response
 from PIL import Image
 
-from ..io import audio_io, container, image_io
+from ..io import audio_io, container, image_cipher, image_io
 
 MAX_UPLOAD_BYTES = None
 MAX_DECOMPRESSED_BYTES = 512 * 1024 * 1024
@@ -118,6 +118,34 @@ def container_response(data, metadata, filename):
     buffer = io.BytesIO()
     container.save_container(buffer, data, metadata)
     return _attachment(buffer.getvalue(), "application/octet-stream", filename)
+
+
+def image_cipher_response(real_png, imaginary_png, filename="cipher-pair.zip"):
+    """Return a ZIP containing the two image ciphertext components."""
+    buffer = io.BytesIO()
+    # PNGs are already compressed; storing them avoids a second compression
+    # pass and lets the browser unpack the bundle without a ZIP dependency.
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
+        archive.writestr("cipher-real.png", real_png)
+        archive.writestr("cipher-imaginary.png", imaginary_png)
+    return _attachment(buffer.getvalue(), "application/zip", filename)
+
+
+def decode_image_cipher_pair(real_data, imaginary_data):
+    """Decode a pair while applying the same resource limits as image uploads."""
+    try:
+        return image_cipher.decode_pair(
+            real_data,
+            imaginary_data,
+            max_original_pixels=MAX_IMAGE_PIXELS,
+            # Each spatial axis can grow to the next power of two and colour
+            # channels are stacked vertically in the stored PNG.
+            max_cipher_pixels=MAX_IMAGE_PIXELS * 12,
+        )
+    except image_cipher.CipherImageTooLarge as error:
+        raise HTTPException(413, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
 
 
 def _attachment(payload, media_type, filename):

@@ -71,7 +71,10 @@ flag and covers both `numpy` and `custom`.
 
 ## Wiring up the backend
 
-The four encryption/decryption operations demonstrate the connection pattern:
+The encryption/decryption operations demonstrate the connection pattern. Image
+encryption returns a ZIP containing two metadata-bearing 16-bit PNGs (real and
+imaginary components); image decryption uploads that pair. Audio encryption
+continues to use its `.npz` container.
 
 1. **`src/services/types.ts`** already describes every request and response.
    Each field carries the CLI flag it corresponds to.

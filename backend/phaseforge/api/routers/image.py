@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ...core import transform
 from ...image import drpe, freq_edit, watermark
-from ...io import image_io
+from ...io import image_cipher, image_io
 from .. import support
 
 router = APIRouter(prefix="/api/image", tags=["image"])
@@ -13,41 +13,53 @@ router = APIRouter(prefix="/api/image", tags=["image"])
 @router.post("/encrypt")
 async def encrypt(file: UploadFile = File(...), passphrase: str = Form(...),
                   greyscale: bool = Form(False), backend: str = Form("numpy")):
-    """Encrypt an image, returning a ``.npz`` ciphertext container."""
+    """Encrypt an image, returning real and imaginary PNGs in a ZIP."""
     image, mode = support.decode_image(await support.read_upload(file), greyscale)
     with transform.using_backend(backend):
         ciphertext, metadata = drpe.encrypt(image, passphrase)
     metadata["mode"] = mode
-    return support.container_response(ciphertext, metadata, "cipher.npz")
+    real_png, imaginary_png = image_cipher.encode_pair(ciphertext, metadata)
+    return support.image_cipher_response(real_png, imaginary_png)
 
 
 @router.post("/decrypt")
-async def decrypt(file: UploadFile = File(...), passphrase: str = Form(...),
+async def decrypt(real_file: UploadFile = File(...), imaginary_file: UploadFile = File(...),
+                  passphrase: str = Form(...),
                   backend: str = Form("numpy")):
-    """Decrypt a ciphertext container back to a PNG.
+    """Decrypt a real/imaginary ciphertext PNG pair back to a PNG.
 
     A wrong passphrase does not error -- DRPE has no integrity check, so it
     simply produces noise. Telling the two apart is the caller's job.
     """
-    ciphertext, metadata = support.decode_container(await support.read_upload(file))
-    support.expect_kind(metadata, "image")
+    ciphertext, metadata = support.decode_image_cipher_pair(
+        await support.read_upload(real_file),
+        await support.read_upload(imaginary_file),
+    )
     with transform.using_backend(backend):
         image = drpe.decrypt(ciphertext, passphrase, metadata)
     return support.image_response(image, "restored.png", metadata.get("mode"))
 
 
 @router.post("/spectrum")
-async def spectrum(file: UploadFile = File(...), gamma: float = Form(1.0)):
+async def spectrum(file: UploadFile | None = File(None),
+                   real_file: UploadFile | None = File(None),
+                   imaginary_file: UploadFile | None = File(None),
+                   gamma: float = Form(1.0)):
     """Render a magnitude spectrum as a viewable PNG.
 
-    Accepts an ordinary image or a ``.npz`` ciphertext -- the latter is how the
-    frontend shows that encrypted output really is structureless noise.
+    Accepts an ordinary image or a real/imaginary ciphertext pair.
     """
-    payload = await support.read_upload(file)
-    if payload[:2] == b"PK":
-        data, _ = support.decode_container(payload)
+    if file is not None and (real_file is not None or imaginary_file is not None):
+        raise HTTPException(400, "provide either an image or a cipher pair, not both")
+    if file is not None:
+        data, _ = support.decode_image(await support.read_upload(file))
+    elif real_file is not None and imaginary_file is not None:
+        data, _ = support.decode_image_cipher_pair(
+            await support.read_upload(real_file),
+            await support.read_upload(imaginary_file),
+        )
     else:
-        data, _ = support.decode_image(payload)
+        raise HTTPException(400, "provide an image or both cipher components")
     return support.image_response(freq_edit.spectrum_preview(data, gamma), "spectrum.png")
 
 

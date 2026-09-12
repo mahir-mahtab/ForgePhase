@@ -2,6 +2,7 @@
 
 import type {
   ArtifactResult,
+  CipherPairResult,
   OperationId,
   ServiceResult,
 } from '@/services/types'
@@ -76,8 +77,7 @@ export function notImplemented<T>(
 }
 
 /**
- * Reference implementation for when the backend exists. Nothing calls it yet;
- * it documents the intended shape so the switch is mechanical.
+ * POST a multipart form to a JSON endpoint.
  *
  * The endpoint path mirrors the CLI command name exactly.
  */
@@ -85,8 +85,9 @@ export async function postForm<T>(
   operation: OperationId,
   body: FormData,
   signal?: AbortSignal,
+  endpoint: string = operation,
 ): Promise<ServiceResult<T>> {
-  const response = await fetch(`${API_BASE_URL}/${operation}`, {
+  const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
     method: 'POST',
     body,
     signal,
@@ -158,4 +159,98 @@ export async function postArtifact(
       details,
     },
   }
+}
+
+/** POST an image encryption request and unpack its two-file ZIP response. */
+export async function postCipherPair(
+  operation: OperationId,
+  endpoint: string,
+  body: FormData,
+  details: CipherPairResult['details'],
+  signal?: AbortSignal,
+): Promise<ServiceResult<CipherPairResult>> {
+  const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+    method: 'POST',
+    body,
+    signal,
+  })
+
+  if (!response.ok) {
+    return {
+      status: 'error',
+      operation,
+      message: await errorMessage(response),
+    }
+  }
+
+  const bundle = await response.blob()
+  try {
+    const files = await unzipPair(bundle)
+    const real = files.get('cipher-real.png')
+    const imaginary = files.get('cipher-imaginary.png')
+    if (!real || !imaginary) throw new Error('cipher pair is missing a component')
+
+    return {
+      status: 'ok',
+      data: {
+        real: artifactFromFile(real),
+        imaginary: artifactFromFile(imaginary),
+        bundle: {
+          name: responseFilename(response, 'cipher-pair.zip'),
+          mimeType: bundle.type || 'application/zip',
+          byteLength: bundle.size,
+          url: URL.createObjectURL(bundle),
+        },
+        details,
+      },
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      operation,
+      message: error instanceof Error ? error.message : 'Could not unpack cipher pair.',
+    }
+  }
+}
+
+function artifactFromFile(file: File): CipherPairResult['real'] {
+  return {
+    name: file.name,
+    mimeType: file.type || 'image/png',
+    byteLength: file.size,
+    url: URL.createObjectURL(file),
+  }
+}
+
+/** Minimal ZIP reader for the two deterministic PNG entries returned by the API. */
+async function unzipPair(blob: Blob): Promise<Map<string, File>> {
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const files = new Map<string, File>()
+  let offset = 0
+  while (offset + 30 <= view.byteLength && view.getUint32(offset, true) === 0x04034b50) {
+    const method = view.getUint16(offset + 8, true)
+    const compressedSize = view.getUint32(offset + 18, true)
+    const nameLength = view.getUint16(offset + 26, true)
+    const extraLength = view.getUint16(offset + 28, true)
+    const nameStart = offset + 30
+    const name = new TextDecoder().decode(bytes.subarray(nameStart, nameStart + nameLength))
+    const dataStart = nameStart + nameLength + extraLength
+    const compressed = bytes.subarray(dataStart, dataStart + compressedSize)
+    let data: Uint8Array
+    if (method === 0) {
+      data = compressed
+    } else if (method === 8) {
+      const compressedCopy = compressed.slice()
+      const stream = new Blob([compressedCopy]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+      data = new Uint8Array(await new Response(stream).arrayBuffer())
+    } else {
+      throw new Error(`Unsupported ZIP compression method ${method}.`)
+    }
+    const dataCopy = data.slice()
+    files.set(name, new File([dataCopy], name, { type: 'image/png' }))
+    offset = dataStart + compressedSize
+  }
+  if (files.size === 0) throw new Error('The API returned an invalid cipher ZIP.')
+  return files
 }

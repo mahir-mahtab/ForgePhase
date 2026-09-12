@@ -5,18 +5,19 @@
  * as deliberate placeholders until they are connected separately.
  */
 
-import { notImplemented, postArtifact } from '@/services/client'
+import { notImplemented, postArtifact, postCipherPair, postForm } from '@/services/client'
 import type {
   ArtifactResult,
-  AttackReportRequest,
   FilterRequest,
   ImageDecryptRequest,
   ImageEncryptRequest,
+  ImageAttackReportRequest,
   RobustnessReport,
   ServiceResult,
   SpectrumRequest,
   WatermarkEmbedRequest,
   WatermarkExtractRequest,
+  CipherPairResult,
 } from '@/services/types'
 
 /** Defaults lifted from `phaseforge/cli.py` so the UI opens on valid values. */
@@ -32,18 +33,17 @@ export const IMAGE_DEFAULTS = {
 /** `phaseforge image-encrypt` -- DRPE over the 2D spectrum. */
 export function encryptImage(
   request: ImageEncryptRequest,
-): Promise<ServiceResult<ArtifactResult>> {
+): Promise<ServiceResult<CipherPairResult>> {
   const body = new FormData()
   body.set('file', request.input)
   body.set('passphrase', request.passphrase)
   body.set('greyscale', String(request.greyscale))
   body.set('backend', request.backend)
 
-  return postArtifact(
+  return postCipherPair(
     'image-encrypt',
     'image/encrypt',
     body,
-    'cipher.npz',
     [
       { label: 'Source', value: request.input.name },
       { label: 'Backend', value: request.backend },
@@ -53,12 +53,13 @@ export function encryptImage(
   )
 }
 
-/** `phaseforge image-decrypt` -- invert DRPE from a `.npz` container. */
+/** `phaseforge image-decrypt` -- invert DRPE from a real/imaginary PNG pair. */
 export function decryptImage(
   request: ImageDecryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
   const body = new FormData()
-  body.set('file', request.container)
+  body.set('real_file', request.realFile)
+  body.set('imaginary_file', request.imaginaryFile)
   body.set('passphrase', request.passphrase)
   body.set('backend', request.backend)
 
@@ -68,7 +69,8 @@ export function decryptImage(
     body,
     'restored.png',
     [
-      { label: 'Container', value: request.container.name },
+      { label: 'Real component', value: request.realFile.name },
+      { label: 'Imaginary component', value: request.imaginaryFile.name },
       { label: 'Backend', value: request.backend },
     ],
     request.signal,
@@ -100,12 +102,28 @@ export function applyFilter(
 export function renderSpectrum(
   request: SpectrumRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  return notImplemented('spectrum', request.signal)
+  const body = new FormData()
+  if (request.input) body.set(request.imaginaryFile ? 'real_file' : 'file', request.input)
+  if (request.imaginaryFile) body.set('imaginary_file', request.imaginaryFile)
+  body.set('gamma', String(request.gamma))
+  return postArtifact(
+    'spectrum',
+    'image/spectrum',
+    body,
+    'spectrum.png',
+    [{ label: 'Source', value: request.input?.name ?? 'cipher pair' }],
+    request.signal,
+  )
 }
 
-/** `phaseforge attack-report` for an image container. */
+/** `phaseforge attack-report` for an image cipher pair. */
 export function imageRobustnessReport(
-  request: AttackReportRequest,
+  request: ImageAttackReportRequest,
 ): Promise<ServiceResult<RobustnessReport>> {
-  return notImplemented('attack-report', request.signal)
+  const body = new FormData()
+  body.set('real_file', request.realFile)
+  body.set('imaginary_file', request.imaginaryFile)
+  body.set('original', request.original)
+  body.set('passphrase', request.passphrase)
+  return postForm('attack-report', body, request.signal, 'analysis/attack-report')
 }

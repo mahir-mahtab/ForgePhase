@@ -34,11 +34,12 @@ def run(*argv):
 
 
 def test_image_encrypt_decrypt_round_trip(tmp_path, image_file):
-    cipher = tmp_path / "cipher.npz"
+    real = tmp_path / "cipher-real.png"
+    imaginary = tmp_path / "cipher-imaginary.png"
     restored = tmp_path / "restored.png"
 
-    run("image-encrypt", image_file, cipher, "--passphrase", PASSPHRASE)
-    run("image-decrypt", cipher, restored, "--passphrase", PASSPHRASE)
+    run("image-encrypt", image_file, real, imaginary, "--passphrase", PASSPHRASE)
+    run("image-decrypt", real, imaginary, restored, "--passphrase", PASSPHRASE)
 
     original, _ = image_io.load_image(image_file)
     recovered, _ = image_io.load_image(restored)
@@ -46,11 +47,12 @@ def test_image_encrypt_decrypt_round_trip(tmp_path, image_file):
 
 
 def test_image_decrypt_with_wrong_passphrase_yields_noise(tmp_path, image_file):
-    cipher = tmp_path / "cipher.npz"
+    real = tmp_path / "cipher-real.png"
+    imaginary = tmp_path / "cipher-imaginary.png"
     wrong = tmp_path / "wrong.png"
 
-    run("image-encrypt", image_file, cipher, "--passphrase", PASSPHRASE)
-    run("image-decrypt", cipher, wrong, "--passphrase", "not the passphrase")
+    run("image-encrypt", image_file, real, imaginary, "--passphrase", PASSPHRASE)
+    run("image-decrypt", real, imaginary, wrong, "--passphrase", "not the passphrase")
 
     original, _ = image_io.load_image(image_file)
     recovered, _ = image_io.load_image(wrong)
@@ -107,10 +109,11 @@ def test_spectrum_of_image(tmp_path, image_file):
 
 
 def test_spectrum_of_ciphertext_looks_like_noise(tmp_path, image_file):
-    cipher = tmp_path / "cipher.npz"
+    real = tmp_path / "cipher-real.png"
+    imaginary = tmp_path / "cipher-imaginary.png"
     preview = tmp_path / "preview.png"
-    run("image-encrypt", image_file, cipher, "--passphrase", PASSPHRASE)
-    run("spectrum", cipher, preview)
+    run("image-encrypt", image_file, real, imaginary, "--passphrase", PASSPHRASE)
+    run("spectrum", real, preview, "--imaginary", imaginary)
 
     original, _ = image_io.load_image(image_file)
     rendered, _ = image_io.load_image(preview)
@@ -126,11 +129,13 @@ def test_denoise_and_enhance(tmp_path, audio_file):
 
 
 def test_attack_report(tmp_path, image_file, capsys):
-    cipher = tmp_path / "cipher.npz"
-    run("image-encrypt", image_file, cipher, "--passphrase", PASSPHRASE)
+    real = tmp_path / "cipher-real.png"
+    imaginary = tmp_path / "cipher-imaginary.png"
+    run("image-encrypt", image_file, real, imaginary, "--passphrase", PASSPHRASE)
     capsys.readouterr()
 
-    run("attack-report", cipher, image_file, "--passphrase", PASSPHRASE)
+    run("attack-report", real, image_file, "--imaginary", imaginary,
+        "--passphrase", PASSPHRASE)
     assert "noise_5pct" in capsys.readouterr().out
 
 
@@ -149,7 +154,8 @@ def test_kpa_demo(capsys):
 
 
 def test_backend_flag_is_honoured(tmp_path, image_file):
-    cipher = tmp_path / "cipher.npz"
-    run("--backend", "numpy", "image-encrypt", image_file, cipher,
+    real = tmp_path / "cipher-real.png"
+    imaginary = tmp_path / "cipher-imaginary.png"
+    run("--backend", "numpy", "image-encrypt", image_file, real, imaginary,
         "--passphrase", PASSPHRASE)
-    assert cipher.exists()
+    assert real.exists() and imaginary.exists()

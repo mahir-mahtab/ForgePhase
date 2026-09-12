@@ -21,8 +21,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // The Python backend is not wired up yet. When it is, it answers here and
-      // the browser keeps a same-origin path, so no CORS layer is needed.
+      // The Python backend answers here while the browser keeps a same-origin
+      // path, so no CORS layer is needed during local development.
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,

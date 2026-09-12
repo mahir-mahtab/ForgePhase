@@ -49,8 +49,9 @@ export interface ImageEncryptRequest extends BaseOptions {
 }
 
 export interface ImageDecryptRequest extends BaseOptions {
-  /** A `.npz` container produced by `image-encrypt`. */
-  container: File
+  /** The real and imaginary PNGs produced by `image-encrypt`. */
+  realFile: File
+  imaginaryFile: File
   passphrase: string
 }
 
@@ -86,8 +87,9 @@ export interface FilterRequest extends BaseOptions {
 }
 
 export interface SpectrumRequest extends BaseOptions {
-  /** An image, or a `.npz` ciphertext container. */
-  input: File
+  /** An ordinary image, or the real component of a cipher pair. */
+  input?: File
+  imaginaryFile?: File
   /** Display gamma applied to the log-scaled magnitude. */
   gamma: number
 }
@@ -121,7 +123,15 @@ export interface EnhanceRequest extends BaseOptions {
 }
 
 export interface AttackReportRequest extends BaseOptions {
+  /** Audio ciphertext container. */
   ciphertext: File
+  original: File
+  passphrase: string
+}
+
+export interface ImageAttackReportRequest extends BaseOptions {
+  realFile: File
+  imaginaryFile: File
   original: File
   passphrase: string
 }
@@ -168,6 +178,13 @@ export interface RobustnessReport {
 export interface ArtifactResult {
   artifact: Artifact
   /** Free-form detail lines for the result panel, e.g. ciphertext shape. */
+  details: Array<{ label: string; value: string }>
+}
+
+export interface CipherPairResult {
+  real: Artifact
+  imaginary: Artifact
+  bundle: Artifact
   details: Array<{ label: string; value: string }>
 }
 
