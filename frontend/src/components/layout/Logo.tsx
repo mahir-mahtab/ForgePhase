@@ -1,24 +1,26 @@
 /**
- * Coordinates are kept to whole and half units: shorter path data, and the
- * shape is identical once rasterized at the sizes this actually renders at.
+ * Two sine waves half a period apart, crossing where they meet: a signal and
+ * its phase-shifted twin, which is the whole idea of the toolkit.
  */
 export function Logo({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 32 32"
-      className={className}
-      role="img"
-      aria-label="PhaseForge"
-    >
+    <svg viewBox="0 0 32 32" className={className} aria-hidden>
       <rect width="32" height="32" rx="8" className="fill-primary" />
       <path
-        d="M6 22c3 0 3-12 6-12s3 12 6 12 3-12 6-12"
+        d="M4 16c3-9 5-9 8 0s5 9 8 0 5-9 8 0"
         fill="none"
         strokeWidth="2.5"
         strokeLinecap="round"
-        className="stroke-image"
+        className="stroke-primary-foreground"
+        strokeOpacity="0.45"
       />
-      <circle cx="16" cy="16" r="2.5" className="fill-audio" />
+      <path
+        d="M4 16c3 9 5 9 8 0s5-9 8 0 5 9 8 0"
+        fill="none"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        className="stroke-primary-foreground"
+      />
     </svg>
   )
 }

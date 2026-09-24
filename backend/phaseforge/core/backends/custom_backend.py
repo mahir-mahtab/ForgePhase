@@ -15,9 +15,11 @@ Inputs may be real or complex; outputs are always complex. Inputs may carry
 leading batch axes (e.g. shape ``(channels, height, width)``), so implementations
 must operate along the named axis rather than assuming a 1D array.
 
-Lengths are guaranteed to be powers of two -- ``core.padding`` enforces this
-project-wide precisely so a radix-2 Cooley-Tukey implementation is sufficient
-and neither mixed-radix nor Bluestein is needed.
+Power-of-two lengths run through a radix-2 Cooley-Tukey transform. DRPE pads
+to powers of two, but filtering, spectrum previews and watermarking work on the
+image at its own size, so any other length is handled by Bluestein's algorithm,
+which re-expresses an N-point DFT as a convolution evaluated with the same
+radix-2 transform at a padded power-of-two length.
 
 ``tests/test_transform.py`` is parametrized over every registered backend, so
 these functions are validated against the NumPy reference as soon as they exist.
@@ -46,13 +48,45 @@ def ifft2(x):
 
 
 def _transform(x, axis, sign, inverse):
-    """Apply a radix-2 Cooley--Tukey transform along one named axis."""
+    """Apply a DFT along one named axis, radix-2 where possible."""
     values = np.asarray(x, dtype=complex)
     moved = np.moveaxis(values, axis, -1)
-    result = _radix2(moved, sign)
+    length = moved.shape[-1]
+    if length == 0:
+        return np.moveaxis(moved.copy(), -1, axis)
+    if length & (length - 1):
+        result = _bluestein(moved, sign)
+    else:
+        result = _radix2(moved, sign)
     if inverse:
-        result = result / moved.shape[-1]
+        result = result / length
     return np.moveaxis(result, -1, axis)
+
+
+def _bluestein(values, sign):
+    """Arbitrary-length DFT as a chirp convolution (Bluestein, 1970).
+
+    Uses ``k*n = (k^2 + n^2 - (k-n)^2) / 2`` to turn the DFT into a linear
+    convolution with a chirp, which is computed exactly with power-of-two
+    radix-2 transforms of length at least ``2N - 1``.
+    """
+    length = values.shape[-1]
+    n = np.arange(length)
+    # n^2 mod 2N keeps the chirp argument small, so precision does not decay
+    # for long inputs.
+    chirp = np.exp(sign * 1j * np.pi * ((n * n) % (2 * length)) / length)
+
+    size = 1 << (2 * length - 2).bit_length()
+    a = np.zeros(values.shape[:-1] + (size,), dtype=complex)
+    a[..., :length] = values * chirp
+
+    b = np.zeros(size, dtype=complex)
+    b[:length] = np.conj(chirp)
+    b[size - length + 1:] = np.conj(chirp[1:][::-1])
+
+    spectrum = _radix2(a, -1.0) * _radix2(b, -1.0)
+    convolved = _radix2(spectrum, 1.0) / size
+    return convolved[..., :length] * chirp
 
 
 def _radix2(values, sign):

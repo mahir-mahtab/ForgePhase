@@ -1,23 +1,20 @@
-/**
- * Image-domain operations.
- *
- * Encryption and decryption use the Python API. The remaining operations stay
- * as deliberate placeholders until they are connected separately.
- */
+/** Image-domain operations, one per `phaseforge` command. */
 
-import { notImplemented, postArtifact, postCipherPair, postForm } from '@/services/client'
+import { normalizeReport, parseMetric } from '@/lib/report'
+import { form, postArtifact, postJson } from '@/services/client'
 import type {
   ArtifactResult,
   FilterRequest,
+  ImageAttackReportRequest,
   ImageDecryptRequest,
   ImageEncryptRequest,
-  ImageAttackReportRequest,
+  KpaDemoRequest,
+  KpaDemoResult,
   RobustnessReport,
   ServiceResult,
   SpectrumRequest,
   WatermarkEmbedRequest,
   WatermarkExtractRequest,
-  CipherPairResult,
 } from '@/services/types'
 
 /** Defaults lifted from `phaseforge/cli.py` so the UI opens on valid values. */
@@ -30,48 +27,45 @@ export const IMAGE_DEFAULTS = {
   spectrumGamma: 1.0,
 } as const
 
-/** `phaseforge image-encrypt` -- DRPE over the 2D spectrum. */
+/** `phaseforge image-encrypt` -- DRPE over the 2D spectrum, saved as one noise PNG. */
 export function encryptImage(
   request: ImageEncryptRequest,
-): Promise<ServiceResult<CipherPairResult>> {
-  const body = new FormData()
-  body.set('file', request.input)
-  body.set('passphrase', request.passphrase)
-  body.set('greyscale', String(request.greyscale))
-  body.set('backend', request.backend)
-
-  return postCipherPair(
+): Promise<ServiceResult<ArtifactResult>> {
+  return postArtifact(
     'image-encrypt',
     'image/encrypt',
-    body,
+    form({
+      file: request.input,
+      passphrase: request.passphrase,
+      greyscale: String(request.greyscale),
+      backend: request.backend,
+    }),
+    'cipher.png',
     [
       { label: 'Source', value: request.input.name },
-      { label: 'Backend', value: request.backend },
-      { label: 'Colour', value: request.greyscale ? 'greyscale' : 'original' },
+      { label: 'Colour', value: request.greyscale ? 'Greyscale' : 'Original' },
+      { label: 'FFT backend', value: request.backend },
     ],
     request.signal,
   )
 }
 
-/** `phaseforge image-decrypt` -- invert DRPE from a real/imaginary PNG pair. */
+/** `phaseforge image-decrypt` -- invert DRPE from the cipher PNG and passphrase. */
 export function decryptImage(
   request: ImageDecryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  const body = new FormData()
-  body.set('real_file', request.realFile)
-  body.set('imaginary_file', request.imaginaryFile)
-  body.set('passphrase', request.passphrase)
-  body.set('backend', request.backend)
-
   return postArtifact(
     'image-decrypt',
     'image/decrypt',
-    body,
+    form({
+      file: request.cipherFile,
+      passphrase: request.passphrase,
+      backend: request.backend,
+    }),
     'restored.png',
     [
-      { label: 'Real component', value: request.realFile.name },
-      { label: 'Imaginary component', value: request.imaginaryFile.name },
-      { label: 'Backend', value: request.backend },
+      { label: 'Cipher', value: request.cipherFile.name },
+      { label: 'FFT backend', value: request.backend },
     ],
     request.signal,
   )
@@ -81,49 +75,151 @@ export function decryptImage(
 export function embedWatermark(
   request: WatermarkEmbedRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  return notImplemented('watermark-embed', request.signal)
+  return postArtifact(
+    'watermark-embed',
+    'image/watermark/embed',
+    form({
+      file: request.input,
+      watermark_file: request.watermark,
+      strength: String(request.strength),
+      position: String(request.position),
+      backend: request.backend,
+    }),
+    'watermarked.png',
+    [
+      { label: 'Carrier', value: request.input.name },
+      { label: 'Watermark', value: request.watermark.name },
+      { label: 'Strength', value: String(request.strength) },
+      { label: 'Position', value: String(request.position) },
+    ],
+    request.signal,
+  )
 }
 
 /** `phaseforge watermark-extract` -- recover a mark by differencing. */
 export function extractWatermark(
   request: WatermarkExtractRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  return notImplemented('watermark-extract', request.signal)
+  return postArtifact(
+    'watermark-extract',
+    'image/watermark/extract',
+    form({
+      original: request.original,
+      marked: request.marked,
+      height: String(request.height),
+      width: String(request.width),
+      strength: String(request.strength),
+      position: String(request.position),
+      backend: request.backend,
+    }),
+    'watermark.png',
+    [
+      { label: 'Size', value: `${request.width} × ${request.height}` },
+      { label: 'Strength', value: String(request.strength) },
+      { label: 'Position', value: String(request.position) },
+    ],
+    request.signal,
+  )
 }
 
 /** `phaseforge filter` -- low/high/band-pass in the frequency domain. */
 export function applyFilter(
   request: FilterRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  return notImplemented('filter', request.signal)
+  const fields: Record<string, string | Blob> = {
+    file: request.input,
+    kind: request.kind,
+    cutoff: String(request.cutoff),
+    filter_shape: request.filterShape,
+    order: String(request.order),
+    backend: request.backend,
+  }
+  if (request.kind === 'band' && request.highCutoff !== null) {
+    fields.high_cutoff = String(request.highCutoff)
+  }
+
+  return postArtifact(
+    'filter',
+    'image/filter',
+    form(fields),
+    'filtered.png',
+    [
+      { label: 'Filter', value: `${request.kind}-pass, ${request.filterShape}` },
+      {
+        label: 'Cutoff',
+        value:
+          request.kind === 'band'
+            ? `${request.cutoff} – ${request.highCutoff}`
+            : String(request.cutoff),
+      },
+    ],
+    request.signal,
+  )
 }
 
 /** `phaseforge spectrum` -- render a log-scaled magnitude image. */
 export function renderSpectrum(
   request: SpectrumRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  const body = new FormData()
-  if (request.input) body.set(request.imaginaryFile ? 'real_file' : 'file', request.input)
-  if (request.imaginaryFile) body.set('imaginary_file', request.imaginaryFile)
-  body.set('gamma', String(request.gamma))
   return postArtifact(
     'spectrum',
     'image/spectrum',
-    body,
+    form({
+      file: request.input,
+      gamma: String(request.gamma),
+      backend: request.backend,
+    }),
     'spectrum.png',
-    [{ label: 'Source', value: request.input?.name ?? 'cipher pair' }],
+    [
+      { label: 'Source', value: request.input.name },
+      { label: 'Gamma', value: String(request.gamma) },
+    ],
     request.signal,
   )
 }
 
-/** `phaseforge attack-report` for an image cipher pair. */
+/** `phaseforge attack-report` for an image cipher PNG. */
 export function imageRobustnessReport(
   request: ImageAttackReportRequest,
 ): Promise<ServiceResult<RobustnessReport>> {
-  const body = new FormData()
-  body.set('real_file', request.realFile)
-  body.set('imaginary_file', request.imaginaryFile)
-  body.set('original', request.original)
-  body.set('passphrase', request.passphrase)
-  return postForm('attack-report', body, request.signal, 'analysis/attack-report')
+  return postJson(
+    'attack-report',
+    'analysis/attack-report',
+    form({
+      ciphertext: request.cipherFile,
+      original: request.original,
+      passphrase: request.passphrase,
+      backend: request.backend,
+    }),
+    normalizeReport,
+    request.signal,
+  )
+}
+
+/** `phaseforge kpa-demo` -- recover a plaintext from a reused key. */
+export function runKpaDemo(
+  request: KpaDemoRequest,
+): Promise<ServiceResult<KpaDemoResult>> {
+  return postJson(
+    'kpa-demo',
+    'analysis/kpa-demo',
+    { size: request.size, backend: request.backend },
+    (raw) => {
+      const body = raw as {
+        size: number
+        probes_used: number
+        correlation: unknown
+        max_absolute_error: unknown
+        images: KpaDemoResult['images']
+      }
+      return {
+        size: body.size,
+        probesUsed: body.probes_used,
+        correlation: parseMetric(body.correlation),
+        maxAbsoluteError: parseMetric(body.max_absolute_error),
+        images: body.images,
+      }
+    },
+    request.signal,
+  )
 }

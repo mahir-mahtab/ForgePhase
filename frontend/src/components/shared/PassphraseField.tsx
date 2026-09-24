@@ -1,12 +1,9 @@
-import { Eye, EyeOff, KeyRound } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
 import { memo, useCallback, useId, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-
-/** Twelve bullets: a fixed-width hint that never reveals a real length. */
-const DOT_PLACEHOLDER = "•".repeat(12)
 
 interface PassphraseFieldProps {
   value: string
@@ -20,25 +17,20 @@ function PassphraseFieldImpl({
   value,
   onChange,
   label = 'Passphrase',
-  hint = 'Derives both random-phase masks. Never stored, never sent anywhere yet.',
+  hint = 'Both random-phase masks are derived from this. It is sent to your local backend and never stored.',
   disabled = false,
 }: PassphraseFieldProps) {
   const id = useId()
+  const hintId = useId()
   const [isVisible, setIsVisible] = useState(false)
 
-  // Functional update: the callback never needs `isVisible` as a dependency,
-  // so its identity stays stable across renders.
   const toggleVisible = useCallback(() => {
     setIsVisible((previous) => !previous)
   }, [])
 
   return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor={id}>
-        <KeyRound className="size-3.5 text-muted-foreground" aria-hidden />
-        {label}
-      </Label>
-
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
       <div className="relative">
         <Input
           id={id}
@@ -47,8 +39,8 @@ function PassphraseFieldImpl({
           disabled={disabled}
           autoComplete="off"
           spellCheck={false}
-          placeholder={DOT_PLACEHOLDER}
-          className="pr-10 font-mono"
+          aria-describedby={hintId}
+          className="pr-10"
           onChange={(event) => onChange(event.target.value)}
         />
         <Button
@@ -60,15 +52,12 @@ function PassphraseFieldImpl({
           aria-label={isVisible ? 'Hide passphrase' : 'Show passphrase'}
           className="absolute top-0.5 right-0.5"
         >
-          {isVisible ? (
-            <EyeOff className="size-4" />
-          ) : (
-            <Eye className="size-4" />
-          )}
+          {isVisible ? <EyeOff /> : <Eye />}
         </Button>
       </div>
-
-      <p className="text-xs text-muted-foreground">{hint}</p>
+      <p id={hintId} className="text-xs text-muted-foreground">
+        {hint}
+      </p>
     </div>
   )
 }

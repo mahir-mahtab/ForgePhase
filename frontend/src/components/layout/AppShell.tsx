@@ -1,195 +1,197 @@
-import { AudioLines, ImageIcon } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { memo } from 'react'
+import { memo, useEffect, useState } from 'react'
 
 import { BackendSelect } from '@/components/layout/BackendSelect'
+import { BackendStatus } from '@/components/layout/BackendStatus'
 import { Logo } from '@/components/layout/Logo'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
-import { Separator } from '@/components/ui/separator'
+import { Button } from '@/components/ui/button'
+import { useBackendStatus } from '@/hooks/useBackendStatus'
+import { SECTIONS } from '@/lib/navigation'
 import { cn } from '@/lib/utils'
 import type { DomainKind, TransformBackend } from '@/services/types'
 
-interface SectionMeta {
-  id: DomainKind
-  channel: string
-  label: string
-  blurb: string
-  icon: ReactNode
-  markClass: string
-  textClass: string
-}
-
-/**
- * Module-level constant: the nav never changes, so building it once keeps a
- * stable identity and lets the memoized shell skip re-rendering entirely.
- */
-const SECTIONS: readonly SectionMeta[] = [
-  {
-    id: 'image',
-    channel: 'ch1',
-    label: 'Image',
-    blurb: 'Encrypt, watermark, filter, inspect',
-    icon: <ImageIcon className="size-3.5" aria-hidden />,
-    markClass: 'bg-image text-image-ink',
-    textClass: 'text-image',
-  },
-  {
-    id: 'audio',
-    channel: 'ch2',
-    label: 'Audio',
-    blurb: 'Encrypt, denoise, enhance, inspect',
-    icon: <AudioLines className="size-3.5" aria-hidden />,
-    markClass: 'bg-audio text-audio-ink',
-    textClass: 'text-audio',
-  },
-]
-
 interface AppShellProps {
   section: DomainKind
-  onSectionChange: (section: DomainKind) => void
+  /** The open tool in each section, so the sidebar can mark both. */
+  tools: Readonly<Record<DomainKind, string>>
+  onNavigate: (section: DomainKind, tool: string) => void
   backend: TransformBackend
   onBackendChange: (backend: TransformBackend) => void
   children: ReactNode
 }
 
+function Wordmark() {
+  return (
+    <div className="flex items-center gap-2.5">
+      <Logo className="size-8" />
+      <span className="font-display text-2xl leading-none tracking-tight">PhaseForge</span>
+    </div>
+  )
+}
+
 function AppShellImpl({
   section,
-  onSectionChange,
+  tools,
+  onNavigate,
   backend,
   onBackendChange,
   children,
 }: AppShellProps) {
-  const active = SECTIONS.find((item) => item.id === section) ?? SECTIONS[0]!
+  const status = useBackendStatus()
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
-  return (
-    <div className="min-h-dvh bg-background">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-card lg:flex">
-        <div className="flex h-16 items-center gap-2.5 px-5">
-          <Logo className="size-6" />
-          <span className="type-heading text-sm">PhaseForge</span>
-        </div>
+  // Escape closes the mobile drawer, as it would any other overlay.
+  useEffect(() => {
+    if (!drawerOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDrawerOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [drawerOpen])
 
-        <Separator />
+  const sidebar = (
+    <div className="flex h-full flex-col gap-6 px-4 py-5">
+      <div className="flex items-center justify-between px-2">
+        <Wordmark />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="lg:hidden"
+          aria-label="Close navigation"
+          onClick={() => setDrawerOpen(false)}
+        >
+          <X />
+        </Button>
+      </div>
 
-        <nav aria-label="Channels" className="flex flex-col gap-1 p-3">
-          {SECTIONS.map((item) => {
-            const isActive = item.id === section
-            return (
-              <button
-                key={item.id}
-                type="button"
-                aria-current={isActive ? 'page' : undefined}
-                onClick={() => onSectionChange(item.id)}
-                className={cn(
-                  'group flex items-start gap-3 rounded-md px-2.5 py-2.5 text-left transition-colors',
-                  isActive ? 'bg-secondary' : 'hover:bg-secondary/60',
-                )}
-              >
-                {/*
-                  A solid channel block when live, an outline when idle. The
-                  same marker appears on every panel and run button, so colour
-                  means routing rather than decoration.
-                */}
-                <span
+      <nav aria-label="Tools" className="-mx-1 flex flex-1 flex-col gap-6 overflow-y-auto px-1 [scrollbar-width:thin]">
+        {SECTIONS.map((group) => (
+          <div key={group.id} className="flex flex-col gap-1">
+            <p className="flex items-center gap-2 px-3 pb-1 text-[0.6875rem] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+              <group.icon className="size-3.5" aria-hidden />
+              {group.label}
+            </p>
+            {group.tools.map((tool) => {
+              const isActive = group.id === section && tools[group.id] === tool.value
+              return (
+                <button
+                  key={tool.value}
+                  type="button"
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => {
+                    onNavigate(group.id, tool.value)
+                    setDrawerOpen(false)
+                  }}
                   className={cn(
-                    'mt-0.5 flex size-6 shrink-0 items-center justify-center border',
+                    'focus-ring group flex items-center gap-3 rounded-full px-3 py-2 text-left text-sm font-medium transition-colors',
                     isActive
-                      ? cn(item.markClass, 'border-transparent')
-                      : 'border-input text-muted-foreground',
+                      ? 'bg-card text-foreground shadow-[0_1px_0_var(--border),0_0_0_1px_var(--border)]'
+                      : 'text-muted-foreground hover:bg-sidebar-hover hover:text-foreground',
                   )}
                 >
-                  {item.icon}
-                </span>
-
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-baseline gap-2">
-                    <span
-                      className={cn(
-                        'text-sm font-medium',
-                        isActive ? 'text-foreground' : 'text-muted-foreground',
-                      )}
-                    >
-                      {item.label}
-                    </span>
-                    <span
-                      className={cn(
-                        'font-mono text-[0.625rem]',
-                        isActive ? item.textClass : 'text-muted-foreground/70',
-                      )}
-                    >
-                      {item.channel}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {item.blurb}
-                  </span>
-                </span>
-              </button>
-            )
-          })}
-        </nav>
-
-        <div className="mt-auto border-t border-border p-4">
-          <p className="text-xs text-foreground">No backend attached</p>
-          <p className="mt-1 max-w-[34ch] text-xs text-muted-foreground">
-            Controls, validation and result states all run. Each panel shows the
-            command it would send.
-          </p>
-        </div>
-      </aside>
-
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
-          <div className="mx-auto flex h-16 max-w-[1400px] items-center gap-2 px-4 sm:gap-3 sm:px-8">
-            <Logo className="size-6 lg:hidden" />
-
-            <h1 className="hidden min-w-0 items-baseline gap-2 lg:flex">
-              <span className="type-heading text-sm">{active.label}</span>
-              <span className={cn('font-mono text-[0.625rem]', active.textClass)}>
-                {active.channel}
-              </span>
-            </h1>
-
-            {/* Mobile channel switcher: the sidebar's job at small widths. */}
-            <div
-              role="tablist"
-              aria-label="Channels"
-              className="flex items-center gap-1 rounded-md border border-border bg-muted p-1 lg:hidden"
-            >
-              {SECTIONS.map((item) => {
-                const isActive = item.id === section
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    aria-label={item.label}
-                    onClick={() => onSectionChange(item.id)}
+                  <span
                     className={cn(
-                      'flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-sm font-medium transition-colors',
+                      'flex size-7 items-center justify-center rounded-full transition-colors',
                       isActive
-                        ? item.markClass
-                        : 'text-muted-foreground hover:text-foreground',
+                        ? 'bg-highlight text-highlight-foreground'
+                        : 'text-muted-foreground group-hover:text-foreground',
                     )}
                   >
-                    {item.icon}
-                    <span className="hidden sm:inline">{item.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="ml-auto flex items-center gap-2">
-              <BackendSelect value={backend} onChange={onBackendChange} />
-              <ThemeToggle />
-            </div>
+                    <tool.icon className="size-4" aria-hidden />
+                  </span>
+                  {tool.label}
+                </button>
+              )
+            })}
           </div>
-        </header>
+        ))}
+      </nav>
 
-        <main className="mx-auto max-w-[1400px] px-4 py-8 sm:px-8 sm:py-12">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3">
+        <div className="flex items-center justify-between gap-2">
+          <BackendStatus status={status} />
+          <ThemeToggle />
+        </div>
+        <BackendSelect value={backend} onChange={onBackendChange} />
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="min-h-dvh bg-background lg:pl-68">
+      {/* Desktop: a fixed rail. */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-68 border-r border-border bg-sidebar lg:block">
+        {sidebar}
+      </aside>
+
+      {/* Mobile: the same rail as a drawer. */}
+      <div
+        className={cn(
+          'fixed inset-0 z-40 lg:hidden',
+          drawerOpen ? 'pointer-events-auto' : 'pointer-events-none',
+        )}
+        aria-hidden={!drawerOpen}
+        inert={!drawerOpen}
+      >
+        <div
+          className={cn(
+            'absolute inset-0 bg-foreground/30 transition-opacity',
+            drawerOpen ? 'opacity-100' : 'opacity-0',
+          )}
+          onClick={() => setDrawerOpen(false)}
+        />
+        <aside
+          className={cn(
+            'absolute inset-y-0 left-0 w-72 max-w-[85vw] border-r border-border bg-sidebar shadow-xl transition-transform',
+            drawerOpen ? 'translate-x-0' : '-translate-x-full',
+          )}
+        >
+          {sidebar}
+        </aside>
+      </div>
+
+      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-background/90 px-4 backdrop-blur lg:hidden">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Open navigation"
+          onClick={() => setDrawerOpen(true)}
+        >
+          <Menu />
+        </Button>
+        <Wordmark />
+      </header>
+
+      <div className="flex min-h-dvh flex-col">
+        {status.state === 'offline' ? (
+          <div role="alert" className="border-b border-border bg-warning-soft">
+            <p className="mx-auto max-w-6xl px-4 py-2.5 text-sm text-warning sm:px-8">
+              The PhaseForge API is not reachable. Start it from{' '}
+              <code className="font-mono text-xs">backend/</code> with{' '}
+              <code className="font-mono text-xs">
+                uvicorn phaseforge.api.app:app --port 8000
+              </code>
+              .
+            </p>
+          </div>
+        ) : null}
+
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-8 lg:py-12">
           {children}
         </main>
+
+        <footer className="border-t border-border">
+          <p className="mx-auto max-w-6xl px-4 py-5 text-xs text-muted-foreground sm:px-8">
+            Double random phase encoding is a teaching cipher: it is linear, has no
+            integrity check, and breaks under key reuse. Do not use it to protect real
+            secrets.
+          </p>
+        </footer>
       </div>
     </div>
   )

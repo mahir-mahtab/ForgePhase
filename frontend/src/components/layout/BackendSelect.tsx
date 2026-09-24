@@ -1,4 +1,3 @@
-import { Cpu } from 'lucide-react'
 import { memo } from 'react'
 
 import {
@@ -16,39 +15,28 @@ interface BackendSelectProps {
 }
 
 /** Matches `transform.available_backends()` on the Python side. */
-const BACKENDS: ReadonlyArray<{
-  value: TransformBackend
-  label: string
-  hint: string
-}> = [
-  { value: 'numpy', label: 'NumPy', hint: 'Vectorised reference FFT' },
-  { value: 'custom', label: 'Custom', hint: 'Hand-written radix-2 FFT' },
+const BACKENDS: ReadonlyArray<{ value: TransformBackend; label: string; hint: string }> = [
+  { value: 'numpy', label: 'NumPy', hint: 'Fast reference FFT' },
+  { value: 'custom', label: 'Custom', hint: 'Hand-written radix-2 + Bluestein FFT' },
 ]
 
 function BackendSelectImpl({ value, onChange }: BackendSelectProps) {
-  // Derived during render: the trigger shows only the label, while the menu
-  // keeps the longer hint. Letting SelectValue fall back to the item content
-  // would put two lines in the trigger and overflow narrow headers.
-  const activeLabel =
-    BACKENDS.find((backend) => backend.value === value)?.label ?? value
+  const activeLabel = BACKENDS.find((backend) => backend.value === value)?.label ?? value
 
   return (
-    <Select
-      value={value}
-      onValueChange={(next) => onChange(next as TransformBackend)}
-    >
-      <SelectTrigger className="w-32 sm:w-36" aria-label="DFT backend">
-        <Cpu className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-        <SelectValue>{activeLabel}</SelectValue>
+    <Select value={value} onValueChange={(next) => onChange(next as TransformBackend)}>
+      <SelectTrigger className="h-9 w-full gap-1.5 rounded-full" aria-label="FFT implementation">
+        <span className="text-muted-foreground">FFT backend</span>
+        <span className="ml-auto font-medium">
+          <SelectValue>{activeLabel}</SelectValue>
+        </span>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent align="end">
         {BACKENDS.map((backend) => (
           <SelectItem key={backend.value} value={backend.value}>
             <span className="flex flex-col">
-              <span className="font-medium">{backend.label}</span>
-              <span className="text-xs text-muted-foreground">
-                {backend.hint}
-              </span>
+              <span>{backend.label}</span>
+              <span className="text-xs text-muted-foreground">{backend.hint}</span>
             </span>
           </SelectItem>
         ))}

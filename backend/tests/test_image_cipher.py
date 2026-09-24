@@ -65,3 +65,27 @@ def test_duplicate_component_is_rejected():
     real_png, _ = image_cipher.encode_pair(np.ones(shape, complex), _metadata(shape))
     with pytest.raises(ValueError, match="expected imaginary"):
         image_cipher.decode_pair(real_png, real_png)
+
+
+def test_single_png_round_trip():
+    for shape in ((1, 7, 9), (3, 8, 10)):
+        rng = np.random.default_rng(5)
+        ciphertext = rng.normal(size=shape) + 1j * rng.normal(size=shape)
+        png = image_cipher.encode(ciphertext, _metadata(shape))
+
+        assert image_cipher.is_cipher_png(png)
+        with Image.open(io.BytesIO(png)) as image:
+            assert image.mode == "I;16"
+            assert image.size == (shape[2], 2 * shape[0] * shape[1])
+
+        recovered, metadata = image_cipher.decode(png)
+        assert recovered.shape == shape
+        assert metadata["mode"] == _metadata(shape)["mode"]
+        assert np.max(np.abs(recovered - ciphertext)) < 1e-3
+
+
+def test_pair_component_is_not_a_single_cipher():
+    shape = (1, 4, 4)
+    real_png, _ = image_cipher.encode_pair(np.ones(shape, complex), _metadata(shape))
+    with pytest.raises(ValueError, match="expected complex"):
+        image_cipher.decode(real_png)

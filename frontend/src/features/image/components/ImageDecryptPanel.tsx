@@ -1,4 +1,3 @@
-import { Unlock } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
@@ -6,79 +5,74 @@ import { OperationShell } from '@/components/shared/OperationShell'
 import { PassphraseField } from '@/components/shared/PassphraseField'
 import { ResultPanel } from '@/components/shared/ResultPanel'
 import { useOperation } from '@/hooks/useOperation'
-import { ACCEPT_IMAGE } from '@/lib/accept'
+import { ACCEPT_PNG } from '@/lib/accept'
+import { cliCommand } from '@/lib/cli'
 import { decryptImage } from '@/services/imageService'
 import type { TransformBackend } from '@/services/types'
 
-const ICON = <Unlock className="size-4" aria-hidden />
+interface ImageDecryptPanelProps {
+  backend: TransformBackend
+  cipherFile: File | null
+  onCipherChange: (file: File | null) => void
+}
 
-export function ImageDecryptPanel({ backend }: { backend: TransformBackend }) {
-  const [realFile, setRealFile] = useState<File | null>(null)
-  const [imaginaryFile, setImaginaryFile] = useState<File | null>(null)
+export function ImageDecryptPanel({
+  backend,
+  cipherFile,
+  onCipherChange,
+}: ImageDecryptPanelProps) {
   const [passphrase, setPassphrase] = useState('')
   const { state, execute, reset } = useOperation(decryptImage)
 
-  const canRun = realFile !== null && imaginaryFile !== null && passphrase.length > 0
+  const isRunning = state.phase === 'running'
+  const canRun = cipherFile !== null && passphrase.length > 0
 
   const handleRun = useCallback(() => {
-    if (!realFile || !imaginaryFile) return
-    void execute({ realFile, imaginaryFile, passphrase, backend })
-  }, [backend, execute, imaginaryFile, passphrase, realFile])
-
-  const command = `phaseforge --backend ${backend} image-decrypt ${
-    realFile?.name ?? '<cipher-real.png>'
-  } ${imaginaryFile?.name ?? '<cipher-imaginary.png>'} restored.png`
+    if (!cipherFile) return
+    void execute({ cipherFile, passphrase, backend })
+  }, [backend, cipherFile, execute, passphrase])
 
   return (
     <OperationShell
-      tone="image"
-      icon={ICON}
-      title="Decrypt a cipher pair"
-      description="Rebuilds both masks from the passphrase, combines the real and imaginary components, and inverts the transform. A wrong passphrase decrypts to noise rather than failing."
-      command="image-decrypt"
-      runLabel="Decrypt image"
+      title="Decrypt an image"
+      description="Rebuilds both masks from the passphrase and reverses the transform. There is no checksum: a wrong passphrase gives noise, not an error."
+      runLabel="Decrypt"
       canRun={canRun}
-      blockedReason="Pick both cipher PNGs and enter their passphrase"
-      isRunning={state.phase === 'running'}
+      blockedReason="Add the encrypted image and the passphrase."
+      isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
+      command={cliCommand(
+        'phaseforge', '--backend', backend, 'image-decrypt',
+        cipherFile?.name ?? 'cipher.png', 'restored.png',
+      )}
       result={
         <ResultPanel
           state={state}
-          tone="image"
-          idleHint="The recovered image appears here after both cipher components are validated."
-          cliCommand={command}
+          idleHint="The restored image appears here."
+          note={
+            <p className="text-xs text-muted-foreground">
+              Looks like noise? The passphrase is probably wrong.
+            </p>
+          }
         />
       }
     >
       <FileDropzone
-        label="Real cipher component"
-        hint="cipher-real.png"
+        label="Encrypted image"
+        hint="the noisy cipher.png"
         kind="image"
-        accept={ACCEPT_IMAGE}
-        tone="image"
-        file={realFile}
-        onFileChange={setRealFile}
-        disabled={state.phase === 'running'}
+        accept={ACCEPT_PNG}
+        file={cipherFile}
+        onFileChange={onCipherChange}
+        disabled={isRunning}
       />
-
-      <FileDropzone
-        label="Imaginary cipher component"
-        hint="cipher-imaginary.png"
-        kind="image"
-        accept={ACCEPT_IMAGE}
-        tone="image"
-        file={imaginaryFile}
-        onFileChange={setImaginaryFile}
-        disabled={state.phase === 'running'}
-      />
-
       <PassphraseField
         value={passphrase}
         onChange={setPassphrase}
-        hint="Must match the passphrase used to encrypt. There is no checksum to warn you."
-        disabled={state.phase === 'running'}
+        hint="Must be the passphrase used to encrypt."
+        disabled={isRunning}
       />
     </OperationShell>
   )

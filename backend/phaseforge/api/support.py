@@ -11,14 +11,17 @@ streamed straight back, so there are no temp files to leak or clean up.
 """
 
 import io
+import os
 import zipfile
 
+import anyio
 import numpy as np
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import Response
 from PIL import Image
 
-from ..io import audio_io, container, image_cipher, image_io
+from ..core import transform
+from ..io import audio_cipher, audio_io, container, image_cipher, image_io
 
 MAX_UPLOAD_BYTES = None
 MAX_DECOMPRESSED_BYTES = 512 * 1024 * 1024
@@ -27,6 +30,43 @@ MAX_AUDIO_SAMPLES = 48_000 * 60
 MAX_AUDIO_CHANNELS = 2
 
 _CHUNK = 64 * 1024
+
+# How many transforms may run at once. Each can hold several complex128 copies
+# of a padded image, so this bounds peak memory rather than CPU alone.
+MAX_CONCURRENT_JOBS = max(1, int(os.environ.get("PHASEFORGE_MAX_JOBS", "2")))
+_limiter = None
+
+
+def _job_limiter():
+    # Created lazily: a limiter binds to the running event loop.
+    global _limiter
+    if _limiter is None:
+        _limiter = anyio.CapacityLimiter(MAX_CONCURRENT_JOBS)
+    return _limiter
+
+
+async def run_job(work, *args, backend=None):
+    """Run CPU-bound ``work(*args)`` in a worker thread.
+
+    Decoding, PBKDF2, transforms and encoding all hold the CPU for a long
+    time; running them on the event loop would stall every other request,
+    including health checks. ``backend`` selects the DFT implementation for
+    this call only -- the selection is a context variable, so concurrent
+    requests never see each other's choice.
+    """
+    if backend is not None:
+        if backend not in transform.available_backends():
+            raise HTTPException(
+                400, f"unknown backend {backend!r}; available: "
+                     f"{', '.join(transform.available_backends())}")
+
+    def job():
+        if backend is None:
+            return work(*args)
+        with transform.using_backend(backend):
+            return work(*args)
+
+    return await anyio.to_thread.run_sync(job, limiter=_job_limiter())
 
 
 async def read_upload(upload: UploadFile, limit=MAX_UPLOAD_BYTES):
@@ -56,12 +96,17 @@ def decode_image(data, greyscale=False):
     except Exception:
         raise HTTPException(400, "could not read that file as an image")
 
+    if width < 1 or height < 1:
+        raise HTTPException(400, "image has no pixels")
     if width * height > MAX_IMAGE_PIXELS:
         raise HTTPException(
             413, f"image is {width}x{height}; the limit is {MAX_IMAGE_PIXELS} pixels "
                  "(transforms pad to a power of two and work in complex128)")
 
-    return image_io.load_image(io.BytesIO(data), greyscale=greyscale)
+    try:
+        return image_io.load_image(io.BytesIO(data), greyscale=greyscale)
+    except Exception:
+        raise HTTPException(400, "could not decode that image")
 
 
 def decode_audio(data):
@@ -72,6 +117,8 @@ def decode_audio(data):
         raise HTTPException(400, "could not read that file as audio")
 
     channels, samples = signal.shape
+    if samples == 0:
+        raise HTTPException(400, "audio file contains no samples")
     if channels > MAX_AUDIO_CHANNELS:
         raise HTTPException(413, f"{channels} channels; the limit is {MAX_AUDIO_CHANNELS}")
     if samples > MAX_AUDIO_SAMPLES:
@@ -114,21 +161,50 @@ def audio_response(array, sample_rate, filename):
     return _attachment(buffer.getvalue(), "audio/wav", filename)
 
 
+def audio_cipher_response(wav, filename="cipher.wav"):
+    """Return the single noise-like WAV that holds an audio ciphertext."""
+    return _attachment(wav, "audio/wav", filename)
+
+
+def decode_audio_cipher(data):
+    """Decode a cipher WAV, rejecting anything too long to transform."""
+    try:
+        return audio_cipher.decode(data, max_samples=MAX_AUDIO_SAMPLES)
+    except audio_cipher.CipherAudioTooLarge as error:
+        raise HTTPException(413, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+
+
 def container_response(data, metadata, filename):
     buffer = io.BytesIO()
     container.save_container(buffer, data, metadata)
     return _attachment(buffer.getvalue(), "application/octet-stream", filename)
 
 
-def image_cipher_response(real_png, imaginary_png, filename="cipher-pair.zip"):
-    """Return a ZIP containing the two image ciphertext components."""
-    buffer = io.BytesIO()
-    # PNGs are already compressed; storing them avoids a second compression
-    # pass and lets the browser unpack the bundle without a ZIP dependency.
-    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
-        archive.writestr("cipher-real.png", real_png)
-        archive.writestr("cipher-imaginary.png", imaginary_png)
-    return _attachment(buffer.getvalue(), "application/zip", filename)
+def image_cipher_png_response(png, filename="cipher.png"):
+    """Return the single noise-like PNG that holds an image ciphertext."""
+    return _attachment(png, "image/png", filename)
+
+
+# Each spatial axis can grow to the next power of two, and colour channels are
+# stacked vertically in the stored PNG.
+_MAX_CIPHER_PIXELS = MAX_IMAGE_PIXELS * 12
+
+
+def decode_image_cipher(data):
+    """Decode a single cipher PNG with the same resource limits as image uploads."""
+    try:
+        return image_cipher.decode(
+            data,
+            max_original_pixels=MAX_IMAGE_PIXELS,
+            # Real and imaginary planes double the stored height.
+            max_cipher_pixels=_MAX_CIPHER_PIXELS * 2,
+        )
+    except image_cipher.CipherImageTooLarge as error:
+        raise HTTPException(413, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
 
 
 def decode_image_cipher_pair(real_data, imaginary_data):
@@ -138,9 +214,7 @@ def decode_image_cipher_pair(real_data, imaginary_data):
             real_data,
             imaginary_data,
             max_original_pixels=MAX_IMAGE_PIXELS,
-            # Each spatial axis can grow to the next power of two and colour
-            # channels are stacked vertically in the stored PNG.
-            max_cipher_pixels=MAX_IMAGE_PIXELS * 12,
+            max_cipher_pixels=_MAX_CIPHER_PIXELS,
         )
     except image_cipher.CipherImageTooLarge as error:
         raise HTTPException(413, str(error)) from error
@@ -164,9 +238,17 @@ def json_safe(value):
     """Replace infinities and NaN, which are not valid JSON, with strings."""
     if isinstance(value, dict):
         return {key: json_safe(item) for key, item in value.items()}
-    if isinstance(value, float) and not np.isfinite(value):
-        return str(value)
+    if isinstance(value, (float, np.floating)):
+        value = float(value)
+        return value if np.isfinite(value) else str(value)
     return value
+
+
+def ensure_finite(array, what="result"):
+    """Refuse to encode a result that went non-finite during processing."""
+    if not np.all(np.isfinite(array)):
+        raise HTTPException(422, f"the {what} contains invalid values; try different parameters")
+    return array
 
 
 def expect_kind(metadata, kind):

@@ -15,9 +15,17 @@ import numpy as np
 from ..core import framing
 
 
+def _check_noise_frames(noise_frames):
+    if isinstance(noise_frames, bool) or not isinstance(noise_frames, (int, np.integer)):
+        raise ValueError(f"noise_frames must be an integer, got {noise_frames!r}")
+    if noise_frames < 1:
+        raise ValueError(f"noise_frames must be at least 1, got {noise_frames}")
+
+
 def estimate_noise_profile(signal, frame_length=framing.DEFAULT_FRAME_LENGTH, hop=None,
                            noise_frames=6):
     """Average magnitude spectrum of the opening frames, assumed noise-only."""
+    _check_noise_frames(noise_frames)
     spectra, _ = framing.stft(signal, frame_length, hop)
     usable = min(noise_frames, spectra.shape[0])
     return np.mean(np.abs(spectra[:usable]), axis=0)
@@ -26,10 +34,11 @@ def estimate_noise_profile(signal, frame_length=framing.DEFAULT_FRAME_LENGTH, ho
 def denoise(signal, noise_profile=None, over_subtraction=2.0, floor=0.05,
             frame_length=framing.DEFAULT_FRAME_LENGTH, hop=None, noise_frames=6):
     """Spectrally subtract noise from a 1D signal."""
-    if over_subtraction < 1.0:
+    if not np.isfinite(over_subtraction) or over_subtraction < 1.0:
         raise ValueError(f"over_subtraction must be >= 1, got {over_subtraction}")
-    if not 0.0 <= floor < 1.0:
+    if not np.isfinite(floor) or not 0.0 <= floor < 1.0:
         raise ValueError(f"floor must be in [0, 1), got {floor}")
+    _check_noise_frames(noise_frames)
 
     spectra, meta = framing.stft(signal, frame_length, hop)
     if noise_profile is None:

@@ -1,10 +1,11 @@
-import { Lock } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { PassphraseField } from '@/components/shared/PassphraseField'
 import { ResultPanel } from '@/components/shared/ResultPanel'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -15,16 +16,17 @@ import {
 } from '@/components/ui/select'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_AUDIO } from '@/lib/accept'
-import {
-  AUDIO_DEFAULTS,
-  BLOCK_SIZES,
-  encryptAudio,
-} from '@/services/audioService'
+import { cliCommand } from '@/lib/cli'
+import { SAMPLES } from '@/lib/samples'
+import { AUDIO_DEFAULTS, BLOCK_SIZES, encryptAudio } from '@/services/audioService'
 import type { TransformBackend } from '@/services/types'
 
-const ICON = <Lock className="size-4" aria-hidden />
+interface AudioEncryptPanelProps {
+  backend: TransformBackend
+  onOpenInDecrypt: (container: File) => void
+}
 
-export function AudioEncryptPanel({ backend }: { backend: TransformBackend }) {
+export function AudioEncryptPanel({ backend, onOpenInDecrypt }: AudioEncryptPanelProps) {
   const [file, setFile] = useState<File | null>(null)
   const [passphrase, setPassphrase] = useState('')
   const [blockSize, setBlockSize] = useState<number>(AUDIO_DEFAULTS.blockSize)
@@ -38,55 +40,59 @@ export function AudioEncryptPanel({ backend }: { backend: TransformBackend }) {
     void execute({ input: file, passphrase, blockSize, backend })
   }, [backend, blockSize, execute, file, passphrase])
 
-  const command = [
-    'phaseforge --backend',
-    backend,
-    'audio-encrypt',
-    file?.name ?? '<input.wav>',
-    'cipher.npz --block-size',
-    blockSize,
-  ].join(' ')
-
   return (
     <OperationShell
-      tone="audio"
-      icon={ICON}
-      title="Block-based DRPE"
-      description="Splits the waveform into fixed blocks and runs double random phase encryption over each one. Every channel gets its own mask pair, derived from the passphrase."
-      command="audio-encrypt"
-      runLabel="Encrypt audio"
+      title="Encrypt audio"
+      description="Cuts the waveform into fixed-size blocks and applies double random phase encoding to each, with a separate mask pair per block and channel."
+      runLabel="Encrypt"
       canRun={canRun}
-      blockedReason="Pick an audio file and enter a passphrase"
+      blockedReason="Choose an audio file and enter a passphrase."
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
+      command={cliCommand(
+        'phaseforge', '--backend', backend, 'audio-encrypt',
+        file?.name ?? 'input.wav', 'cipher.wav', '--block-size', blockSize,
+      )}
       result={
         <ResultPanel
           state={state}
-          tone="audio"
-          idleHint="The ciphertext container appears here, with its block count and sample rate."
-          cliCommand={command}
+          idleHint="The encrypted audio appears here as a single WAV that sounds like static."
+          note={
+            <p className="text-xs text-muted-foreground">
+              Keep this WAV exactly as it is. It, plus the passphrase, is all you need to
+              decrypt. It plays for twice as long as the original, and converting it to
+              MP3 or editing it will destroy the recording. Turn the volume down before
+              playing it.
+            </p>
+          }
+          actions={(result) => (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => onOpenInDecrypt(result.artifact.file)}
+            >
+              Open in Decrypt
+              <ArrowRight />
+            </Button>
+          )}
         />
       }
     >
       <FileDropzone
-        label="Source audio"
+        label="Audio"
         kind="audio"
         accept={ACCEPT_AUDIO}
-        tone="audio"
         file={file}
         onFileChange={setFile}
         disabled={isRunning}
+        sample={SAMPLES.speechClean}
       />
 
-      <PassphraseField
-        value={passphrase}
-        onChange={setPassphrase}
-        disabled={isRunning}
-      />
+      <PassphraseField value={passphrase} onChange={setPassphrase} disabled={isRunning} />
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="audio-block-size">Block size</Label>
         <Select
           value={String(blockSize)}
@@ -105,9 +111,8 @@ export function AudioEncryptPanel({ backend }: { backend: TransformBackend }) {
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          Powers of two only, so no block needs padding. Larger blocks are
-          fewer, cheaper transforms; smaller ones localise damage when part of a
-          ciphertext is lost.
+          Larger blocks mean fewer transforms; smaller ones limit how much is
+          lost when part of the file is damaged.
         </p>
       </div>
     </OperationShell>

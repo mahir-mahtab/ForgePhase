@@ -16,7 +16,56 @@ from ..core.padding import is_power_of_two
 from ..keys import derive
 
 DEFAULT_BLOCK_SIZE = 4096
+# Below this a block holds too little signal to hide it; above it one block's
+# masks and complex intermediates grow without adding anything.
+MIN_BLOCK_SIZE = 64
+MAX_BLOCK_SIZE = 65536
 _CHANNEL_STRIDE = 1 << 32
+
+
+def validate_block_size(block_size):
+    if isinstance(block_size, bool) or not isinstance(block_size, (int, np.integer)):
+        raise ValueError(f"block_size must be an integer, got {block_size!r}")
+    if not is_power_of_two(block_size):
+        raise ValueError(f"block_size must be a power of two, got {block_size}")
+    if not MIN_BLOCK_SIZE <= block_size <= MAX_BLOCK_SIZE:
+        raise ValueError(
+            f"block_size must be between {MIN_BLOCK_SIZE} and {MAX_BLOCK_SIZE}, got {block_size}")
+
+
+def validate_ciphertext(ciphertext, metadata):
+    """Check an audio ciphertext and its metadata agree before any work is done.
+
+    Containers come from users, so every field decryption relies on is checked
+    here rather than surfacing later as a ``KeyError`` or a huge allocation.
+    """
+    if metadata.get("kind") != "audio":
+        raise ValueError(f"expected audio ciphertext, got kind={metadata.get('kind')!r}")
+    for field in ("salt", "iterations", "sample_rate", "block_size", "channels", "length"):
+        if field not in metadata:
+            raise ValueError(f"audio container metadata is missing {field!r}")
+
+    salt = metadata["salt"]
+    if not isinstance(salt, (bytes, bytearray)) or len(salt) != derive.SALT_BYTES:
+        raise ValueError("audio container has an invalid salt")
+    derive.validate_iterations(metadata["iterations"])
+    validate_block_size(metadata["block_size"])
+
+    for field in ("sample_rate", "channels", "length"):
+        value = metadata[field]
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
+            raise ValueError(f"audio container field {field!r} must be a positive integer")
+
+    ciphertext = np.asarray(ciphertext)
+    if ciphertext.ndim != 3 or not np.iscomplexobj(ciphertext):
+        raise ValueError("audio ciphertext must be a 3D complex array")
+    channels, n_blocks, block_size = ciphertext.shape
+    if channels != metadata["channels"] or block_size != metadata["block_size"]:
+        raise ValueError("audio ciphertext shape does not match its metadata")
+    if n_blocks != int(np.ceil(metadata["length"] / block_size)):
+        raise ValueError("audio ciphertext block count does not match its length")
+    if not np.all(np.isfinite(ciphertext)):
+        raise ValueError("audio ciphertext contains non-finite values")
 
 
 def _as_channel_first(signal):
@@ -48,8 +97,7 @@ def encrypt(signal, passphrase, sample_rate, salt=None, block_size=DEFAULT_BLOCK
     Returns ``(ciphertext, metadata)`` with ciphertext shaped
     ``(channels, n_blocks, block_size)``.
     """
-    if not is_power_of_two(block_size):
-        raise ValueError(f"block_size must be a power of two, got {block_size}")
+    validate_block_size(block_size)
 
     signal = _as_channel_first(signal)
     salt = derive.new_salt() if salt is None else salt
@@ -81,8 +129,7 @@ def encrypt(signal, passphrase, sample_rate, salt=None, block_size=DEFAULT_BLOCK
 
 def decrypt(ciphertext, passphrase, metadata):
     """Invert :func:`encrypt`, returning a ``(channels, samples)`` waveform."""
-    if metadata.get("kind") != "audio":
-        raise ValueError(f"expected audio ciphertext, got kind={metadata.get('kind')!r}")
+    validate_ciphertext(ciphertext, metadata)
 
     ciphertext = np.asarray(ciphertext)
     key = derive.derive_key(passphrase, metadata["salt"], metadata["iterations"])

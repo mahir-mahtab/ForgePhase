@@ -36,7 +36,6 @@ function ParamSliderImpl({
   unit,
 }: ParamSliderProps) {
   const id = useId()
-  // Derived during render -- cheap arithmetic does not belong in state.
   const decimals = precision ?? decimalsOf(step)
 
   const handleChange = useCallback(
@@ -48,15 +47,12 @@ function ParamSliderImpl({
   )
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3">
         <Label htmlFor={id}>{label}</Label>
-        <output
-          htmlFor={id}
-          className="tabular rounded-md bg-secondary px-2 py-0.5 font-mono text-xs text-secondary-foreground"
-        >
+        <output htmlFor={id} className="tabular font-mono text-xs text-muted-foreground">
           {value.toFixed(decimals)}
-          {unit ? <span className="text-muted-foreground"> {unit}</span> : null}
+          {unit ? ` ${unit}` : null}
         </output>
       </div>
 
@@ -71,9 +67,7 @@ function ParamSliderImpl({
         aria-label={label}
       />
 
-      {description ? (
-        <p className="text-xs text-muted-foreground">{description}</p>
-      ) : null}
+      {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
     </div>
   )
 }

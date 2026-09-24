@@ -1,26 +1,32 @@
-import { Lock } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
-import { CipherPairResultPanel } from '@/components/shared/CipherPairResultPanel'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { PassphraseField } from '@/components/shared/PassphraseField'
+import { ResultPanel } from '@/components/shared/ResultPanel'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_IMAGE } from '@/lib/accept'
+import { cliCommand } from '@/lib/cli'
+import { SAMPLES } from '@/lib/samples'
 import { encryptImage } from '@/services/imageService'
 import type { TransformBackend } from '@/services/types'
 
-const ICON = <Lock className="size-4" aria-hidden />
+interface ImageEncryptPanelProps {
+  backend: TransformBackend
+  onOpenInDecrypt: (cipher: File) => void
+}
 
-export function ImageEncryptPanel({ backend }: { backend: TransformBackend }) {
+export function ImageEncryptPanel({ backend, onOpenInDecrypt }: ImageEncryptPanelProps) {
   const [file, setFile] = useState<File | null>(null)
   const [passphrase, setPassphrase] = useState('')
   const [greyscale, setGreyscale] = useState(false)
   const { state, execute, reset } = useOperation(encryptImage)
 
-  // Derived during render: storing this in state would only let it drift.
+  const isRunning = state.phase === 'running'
   const canRun = file !== null && passphrase.length > 0
 
   const handleRun = useCallback(() => {
@@ -28,61 +34,69 @@ export function ImageEncryptPanel({ backend }: { backend: TransformBackend }) {
     void execute({ input: file, passphrase, greyscale, backend })
   }, [backend, execute, file, greyscale, passphrase])
 
-  const command = `phaseforge --backend ${backend} image-encrypt ${
-    file?.name ?? '<input>'
-  } cipher-real.png cipher-imaginary.png${greyscale ? ' --greyscale' : ''}`
-
   return (
     <OperationShell
-      tone="image"
-      icon={ICON}
-      title="Double random phase encryption"
-      description="Two passphrase-derived random-phase masks, one in the spatial domain and one in the frequency domain. The output is a real and imaginary PNG pair."
-      command="image-encrypt"
-      runLabel="Encrypt image"
+      title="Encrypt an image"
+      description="Multiplies the image by a random phase mask, transforms it, and multiplies by a second mask in the frequency domain. Both masks come from your passphrase."
+      runLabel="Encrypt"
       canRun={canRun}
-      blockedReason="Pick an image and enter a passphrase"
-      isRunning={state.phase === 'running'}
+      blockedReason="Choose an image and enter a passphrase."
+      isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
+      command={cliCommand(
+        'phaseforge', '--backend', backend, 'image-encrypt',
+        file?.name ?? 'input.png', 'cipher.png',
+        greyscale && '--greyscale',
+      )}
       result={
-        <CipherPairResultPanel
+        <ResultPanel
           state={state}
-          idleHint="The real and imaginary ciphertext previews will appear here."
-          cliCommand={command}
+          idleHint="The encrypted image appears here as a single noisy picture."
+          note={
+            <p className="text-xs text-muted-foreground">
+              Keep this PNG exactly as it is. It, plus the passphrase, is all you need to
+              decrypt. Re-saving it as JPEG or resizing it will destroy the image.
+            </p>
+          }
+          actions={(result) => (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => onOpenInDecrypt(result.artifact.file)}
+            >
+              Open in Decrypt
+              <ArrowRight />
+            </Button>
+          )}
         />
       }
     >
       <FileDropzone
-        label="Source image"
+        label="Image"
         kind="image"
         accept={ACCEPT_IMAGE}
-        tone="image"
         file={file}
         onFileChange={setFile}
-        disabled={state.phase === 'running'}
+        disabled={isRunning}
+        sample={SAMPLES.image}
       />
 
-      <PassphraseField
-        value={passphrase}
-        onChange={setPassphrase}
-        disabled={state.phase === 'running'}
-      />
+      <PassphraseField value={passphrase} onChange={setPassphrase} disabled={isRunning} />
 
-      <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3.5">
+      <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <Label htmlFor="image-encrypt-greyscale">Collapse to greyscale</Label>
-          <p className="mt-1 text-xs text-muted-foreground">
-            One channel instead of three. Roughly a third of the work, and the
-            two-component output is smaller.
+          <Label htmlFor="image-encrypt-greyscale">Convert to greyscale</Label>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            One channel instead of three: faster, with smaller output.
           </p>
         </div>
         <Switch
           id="image-encrypt-greyscale"
           checked={greyscale}
           onCheckedChange={setGreyscale}
-          disabled={state.phase === 'running'}
+          disabled={isRunning}
         />
       </div>
     </OperationShell>

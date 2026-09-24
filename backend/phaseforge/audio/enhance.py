@@ -33,9 +33,11 @@ def enhance(signal, sample_rate, boost=2.0, gate_threshold=1.5, gate_floor=0.1,
     ``gate_threshold`` is a multiple of each frame's median bin magnitude;
     bins below it are attenuated toward ``gate_floor``.
     """
-    if boost < 1.0:
+    if not np.isfinite(boost) or boost < 1.0:
         raise ValueError(f"boost must be >= 1, got {boost}")
-    if not 0.0 <= gate_floor <= 1.0:
+    if not np.isfinite(gate_threshold) or gate_threshold < 0.0:
+        raise ValueError(f"gate_threshold must be >= 0, got {gate_threshold}")
+    if not np.isfinite(gate_floor) or not 0.0 <= gate_floor <= 1.0:
         raise ValueError(f"gate_floor must be in [0, 1], got {gate_floor}")
 
     spectra, meta = framing.stft(signal, frame_length, hop)

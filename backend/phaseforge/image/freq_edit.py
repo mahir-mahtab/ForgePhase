@@ -37,6 +37,10 @@ def build_mask(shape, kind="low", cutoff=0.3, high_cutoff=None, filter_shape="ga
         raise ValueError(f"filter_shape must be one of {FILTER_SHAPES}, got {filter_shape!r}")
     if not 0 < cutoff <= np.sqrt(2):
         raise ValueError(f"cutoff must be in (0, sqrt(2)], got {cutoff}")
+    if filter_shape == "butterworth" and (
+            isinstance(order, bool) or not isinstance(order, (int, np.integer))
+            or not 1 <= order <= 20):
+        raise ValueError(f"order must be an integer in [1, 20], got {order!r}")
 
     distance = radial_distance(shape)
 
@@ -52,8 +56,10 @@ def build_mask(shape, kind="low", cutoff=0.3, high_cutoff=None, filter_shape="ga
     if kind == "high":
         return 1.0 - low_pass(cutoff)
     if kind == "band":
-        if high_cutoff is None or high_cutoff <= cutoff:
+        if high_cutoff is None or not high_cutoff > cutoff:
             raise ValueError("band-pass needs high_cutoff greater than cutoff")
+        if not high_cutoff <= np.sqrt(2):
+            raise ValueError(f"high_cutoff must be at most sqrt(2), got {high_cutoff}")
         return low_pass(high_cutoff) - low_pass(cutoff)
     raise ValueError(f"kind must be 'low', 'high' or 'band', got {kind!r}")
 
@@ -75,6 +81,8 @@ def spectrum_preview(data, gamma=1.0):
     Accepts an image (real) or a ciphertext (complex); a complex input is
     treated as already being a spectrum-domain signal to visualize.
     """
+    if not np.isfinite(gamma) or not 0 < gamma <= 10:
+        raise ValueError(f"gamma must be in (0, 10], got {gamma}")
     data = np.asarray(data)
     if data.ndim == 2:
         data = data[None, :, :]

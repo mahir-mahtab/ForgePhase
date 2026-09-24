@@ -1,9 +1,9 @@
 /**
  * Contract types for the PhaseForge backend.
  *
- * These mirror the `phaseforge` CLI one operation at a time, so when the HTTP
- * layer is written the request shapes already line up with what the Python
- * side accepts. Nothing here performs I/O.
+ * Requests mirror the `phaseforge` CLI one operation at a time; the services
+ * translate them into the multipart fields the Python API accepts. Nothing
+ * here performs I/O.
  */
 
 export type DomainKind = 'image' | 'audio'
@@ -30,6 +30,7 @@ export type OperationId =
   | 'denoise'
   | 'enhance'
   | 'attack-report'
+  | 'kpa-demo'
 
 /** Options every operation accepts. */
 export interface BaseOptions {
@@ -49,9 +50,8 @@ export interface ImageEncryptRequest extends BaseOptions {
 }
 
 export interface ImageDecryptRequest extends BaseOptions {
-  /** The real and imaginary PNGs produced by `image-encrypt`. */
-  realFile: File
-  imaginaryFile: File
+  /** The noise-like cipher PNG produced by `image-encrypt`. */
+  cipherFile: File
   passphrase: string
 }
 
@@ -60,7 +60,7 @@ export interface WatermarkEmbedRequest extends BaseOptions {
   watermark: File
   /** Embedding gain. Higher survives more, but is easier to see. */
   strength: number
-  /** Radial placement in the spectrum, as a fraction of the Nyquist limit. */
+  /** Offset above DC, as a fraction of the image height. */
   position: number
 }
 
@@ -77,7 +77,7 @@ export interface WatermarkExtractRequest extends BaseOptions {
 export interface FilterRequest extends BaseOptions {
   input: File
   kind: FilterKind
-  /** Fraction of the Nyquist limit: 0 is DC, 1 is the spectrum corner. */
+  /** Fraction of the Nyquist limit: 0 is DC, 1 is the spectrum edge. */
   cutoff: number
   /** Upper edge for band-pass; must exceed `cutoff`. Ignored otherwise. */
   highCutoff: number | null
@@ -87,9 +87,8 @@ export interface FilterRequest extends BaseOptions {
 }
 
 export interface SpectrumRequest extends BaseOptions {
-  /** An ordinary image, or the real component of a cipher pair. */
-  input?: File
-  imaginaryFile?: File
+  /** An ordinary image or a cipher PNG; the backend tells them apart. */
+  input: File
   /** Display gamma applied to the log-scaled magnitude. */
   gamma: number
 }
@@ -97,11 +96,12 @@ export interface SpectrumRequest extends BaseOptions {
 export interface AudioEncryptRequest extends BaseOptions {
   input: File
   passphrase: string
-  /** Samples per DRPE block. Powers of two avoid padding. */
+  /** Samples per DRPE block; a power of two. */
   blockSize: number
 }
 
 export interface AudioDecryptRequest extends BaseOptions {
+  /** The noise-like cipher WAV produced by `audio-encrypt`. */
   container: File
   passphrase: string
 }
@@ -110,63 +110,69 @@ export interface DenoiseRequest extends BaseOptions {
   input: File
   /** Spectral subtraction factor. Higher removes more, at the cost of musical noise. */
   overSubtraction: number
-  /** Floor below which the subtracted magnitude is clamped. */
+  /** Fraction of the original magnitude that is always kept. */
   floor: number
+  /** Opening frames assumed to be noise only. */
+  noiseFrames: number
 }
 
 export interface EnhanceRequest extends BaseOptions {
   input: File
   /** Gain applied to the speech band. */
   boost: number
-  /** Noise gate threshold, relative to the estimated noise floor. */
+  /** Gate threshold, as a multiple of each frame's median magnitude. */
   gateThreshold: number
+  /** Gain applied to gated bins. */
+  gateFloor: number
 }
 
-export interface AttackReportRequest extends BaseOptions {
-  /** Audio ciphertext container. */
+export interface AudioAttackReportRequest extends BaseOptions {
   ciphertext: File
   original: File
   passphrase: string
 }
 
 export interface ImageAttackReportRequest extends BaseOptions {
-  realFile: File
-  imaginaryFile: File
+  cipherFile: File
   original: File
   passphrase: string
+}
+
+export interface KpaDemoRequest extends BaseOptions {
+  size: number
 }
 
 /* -------------------------------------------------------------------------- */
 /* Responses                                                                   */
 /* -------------------------------------------------------------------------- */
 
-/** A file the backend produced. `url` is null until a real backend serves one. */
+/**
+ * A file the backend produced, held in memory. Components derive a blob URL
+ * from `file` with `useObjectUrl`, which owns the URL's lifetime.
+ */
 export interface Artifact {
+  file: File
   name: string
   mimeType: string
-  byteLength: number | null
-  url: string | null
+  byteLength: number
 }
 
-export interface ImageMetrics {
-  mse: number
-  psnrDb: number
-  correlation: number
+export type Detail = { label: string; value: string }
+
+/** The payload most operations return: an output file plus what made it. */
+export interface ArtifactResult {
+  artifact: Artifact
+  details: Detail[]
 }
 
-export interface AudioMetrics {
-  mse: number
-  snrDb: number
-  segmentalSnrDb: number
-  correlation: number
-}
-
-export type Metrics = ImageMetrics | AudioMetrics
-
-/** One row of `attacks.robustness_report`. */
+/**
+ * One row of `attacks.robustness_report`. Metric keys are the backend's
+ * snake_case names; non-finite values arrive as strings and are parsed back
+ * to `Infinity`/`NaN`.
+ */
 export interface RobustnessRow {
   attack: string
-  metrics: Metrics
+  metrics: Record<string, number>
 }
 
 export interface RobustnessReport {
@@ -174,32 +180,29 @@ export interface RobustnessReport {
   rows: RobustnessRow[]
 }
 
-/** The payload most operations return: an output file plus what made it. */
-export interface ArtifactResult {
-  artifact: Artifact
-  /** Free-form detail lines for the result panel, e.g. ciphertext shape. */
-  details: Array<{ label: string; value: string }>
+export interface KpaDemoResult {
+  size: number
+  probesUsed: number
+  correlation: number
+  maxAbsoluteError: number
+  images: { secret: string; ciphertext: string; recovered: string }
 }
 
-export interface CipherPairResult {
-  real: Artifact
-  imaginary: Artifact
-  bundle: Artifact
-  details: Array<{ label: string; value: string }>
+export interface BackendInfo {
+  version: string
+  backends: string[]
+  limits: {
+    maxImagePixels: number
+    maxAudioSamples: number
+    maxAudioChannels: number
+  }
 }
 
 /* -------------------------------------------------------------------------- */
 /* Result envelope                                                             */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Every service resolves to one of these.
- *
- * `not-implemented` is a first-class outcome rather than a thrown error: the
- * backend genuinely is not connected yet, and that is a state the UI should
- * render calmly, not a failure it should apologise for.
- */
+/** Every service resolves to one of these; failures are values, not throws. */
 export type ServiceResult<T> =
   | { status: 'ok'; data: T }
-  | { status: 'not-implemented'; operation: OperationId; message: string }
   | { status: 'error'; operation: OperationId; message: string }

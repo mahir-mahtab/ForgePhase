@@ -12,11 +12,8 @@ import {
 const PROFILE_STEPS = 256
 
 /**
- * The mask, live, from the same formula the backend uses.
- *
- * This is a control readout rather than a result: it shows what the current
- * settings build, before anything is sent anywhere, so the filter panel is
- * usable as an instrument even with no backend attached.
+ * The mask, live, from the same formula the backend uses -- so the effect of
+ * each setting is visible before anything is sent.
  */
 function MaskPreviewImpl({ params }: { params: MaskParams }) {
   // Dragging a slider fires continuously. Deferring the copy that drives the
@@ -25,47 +22,27 @@ function MaskPreviewImpl({ params }: { params: MaskParams }) {
 
   const readout = useMemo(() => {
     const profile = sampleProfile(deferred, PROFILE_STEPS)
-    return {
-      passed: passBandFraction(profile),
-      half: halfGainRadius(profile),
-    }
+    return { passed: passBandFraction(profile), half: halfGainRadius(profile) }
   }, [deferred])
 
-  const isStale = deferred !== params
-
   return (
-    <figure className="m-0 flex max-w-sm flex-col gap-3">
+    <figure className="m-0 flex flex-col gap-2">
+      <figcaption className="text-sm font-medium">Filter mask preview</figcaption>
       <div
-        className="transition-opacity"
-        style={{ opacity: isStale ? 0.7 : 1 }}
+        className="mx-auto w-full max-w-64 transition-opacity"
+        style={{ opacity: deferred !== params ? 0.7 : 1 }}
       >
-        <FrequencyPlane params={deferred} tone="image" />
+        <FrequencyPlane params={deferred} />
       </div>
-
-      <dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5">
-        <div className="flex items-baseline gap-2">
-          <dt className="type-narrow text-xs text-muted-foreground">
-            Energy kept
-          </dt>
-          <dd className="tabular font-mono text-xs text-image">
-            {(readout.passed * 100).toFixed(1)}%
-          </dd>
-        </div>
-        <div className="flex items-baseline gap-2">
-          <dt className="type-narrow text-xs text-muted-foreground">
-            Half gain at
-          </dt>
-          <dd className="tabular font-mono text-xs text-foreground">
-            {readout.half === null ? 'never' : `r ${readout.half.toFixed(2)}`}
-          </dd>
-        </div>
-      </dl>
-
-      <figcaption className="max-w-[52ch] text-xs text-muted-foreground">
-        The gain field over the shifted spectrum, DC at the centre, with the
-        same values plotted from centre to corner underneath. Computed in the
-        browser from the formula the backend uses.
-      </figcaption>
+      <p className="text-xs text-muted-foreground">
+        Gain over the spectrum with DC at the centre; the strip below plots it
+        from centre to corner. Passes about{' '}
+        <span className="tabular font-medium text-foreground">
+          {(readout.passed * 100).toFixed(0)}%
+        </span>{' '}
+        of the spectrum area
+        {readout.half === null ? '' : `, half gain at radius ${readout.half.toFixed(2)}`}.
+      </p>
     </figure>
   )
 }

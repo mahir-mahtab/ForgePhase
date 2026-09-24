@@ -1,14 +1,10 @@
-/**
- * Audio-domain operations.
- *
- * Encryption and decryption use the Python API. The remaining operations stay
- * as deliberate placeholders until they are connected separately.
- */
+/** Audio-domain operations, one per `phaseforge` command. */
 
-import { notImplemented, postArtifact } from '@/services/client'
+import { normalizeReport } from '@/lib/report'
+import { form, postArtifact, postJson } from '@/services/client'
 import type {
   ArtifactResult,
-  AttackReportRequest,
+  AudioAttackReportRequest,
   AudioDecryptRequest,
   AudioEncryptRequest,
   DenoiseRequest,
@@ -22,54 +18,54 @@ export const AUDIO_DEFAULTS = {
   blockSize: 4096,
   overSubtraction: 2.0,
   floor: 0.05,
+  noiseFrames: 6,
   boost: 2.0,
   gateThreshold: 1.5,
+  gateFloor: 0.1,
 } as const
 
-/** Powers of two only: anything else forces the backend to pad each block. */
-export const BLOCK_SIZES = [1024, 2048, 4096, 8192, 16384] as const
+/** The powers of two inside the backend's accepted block-size range. */
+export const BLOCK_SIZES = [256, 1024, 2048, 4096, 8192, 16384] as const
 
-/** `phaseforge audio-encrypt` -- block-based DRPE over the waveform. */
+/** `phaseforge audio-encrypt` -- block-based DRPE, saved as one noise WAV. */
 export function encryptAudio(
   request: AudioEncryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  const body = new FormData()
-  body.set('file', request.input)
-  body.set('passphrase', request.passphrase)
-  body.set('block_size', String(request.blockSize))
-  body.set('backend', request.backend)
-
   return postArtifact(
     'audio-encrypt',
     'audio/encrypt',
-    body,
-    'cipher.npz',
+    form({
+      file: request.input,
+      passphrase: request.passphrase,
+      block_size: String(request.blockSize),
+      backend: request.backend,
+    }),
+    'cipher.wav',
     [
       { label: 'Source', value: request.input.name },
-      { label: 'Backend', value: request.backend },
-      { label: 'Block size', value: String(request.blockSize) },
+      { label: 'Block size', value: `${request.blockSize} samples` },
+      { label: 'FFT backend', value: request.backend },
     ],
     request.signal,
   )
 }
 
-/** `phaseforge audio-decrypt` -- invert block DRPE from a `.npz` container. */
+/** `phaseforge audio-decrypt` -- invert block DRPE from the cipher WAV and passphrase. */
 export function decryptAudio(
   request: AudioDecryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  const body = new FormData()
-  body.set('file', request.container)
-  body.set('passphrase', request.passphrase)
-  body.set('backend', request.backend)
-
   return postArtifact(
     'audio-decrypt',
     'audio/decrypt',
-    body,
+    form({
+      file: request.container,
+      passphrase: request.passphrase,
+      backend: request.backend,
+    }),
     'restored.wav',
     [
-      { label: 'Container', value: request.container.name },
-      { label: 'Backend', value: request.backend },
+      { label: 'Cipher', value: request.container.name },
+      { label: 'FFT backend', value: request.backend },
     ],
     request.signal,
   )
@@ -79,19 +75,64 @@ export function decryptAudio(
 export function denoiseAudio(
   request: DenoiseRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  return notImplemented('denoise', request.signal)
+  return postArtifact(
+    'denoise',
+    'audio/denoise',
+    form({
+      file: request.input,
+      over_subtraction: String(request.overSubtraction),
+      floor: String(request.floor),
+      noise_frames: String(request.noiseFrames),
+      backend: request.backend,
+    }),
+    'denoised.wav',
+    [
+      { label: 'Strength', value: String(request.overSubtraction) },
+      { label: 'Floor', value: String(request.floor) },
+      { label: 'Noise sample', value: `${request.noiseFrames} frames` },
+    ],
+    request.signal,
+  )
 }
 
 /** `phaseforge enhance` -- speech-band boost plus a noise gate. */
 export function enhanceAudio(
   request: EnhanceRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
-  return notImplemented('enhance', request.signal)
+  return postArtifact(
+    'enhance',
+    'audio/enhance',
+    form({
+      file: request.input,
+      boost: String(request.boost),
+      gate_threshold: String(request.gateThreshold),
+      gate_floor: String(request.gateFloor),
+      backend: request.backend,
+    }),
+    'enhanced.wav',
+    [
+      { label: 'Speech boost', value: `${request.boost}×` },
+      { label: 'Gate threshold', value: String(request.gateThreshold) },
+      { label: 'Gate level', value: String(request.gateFloor) },
+    ],
+    request.signal,
+  )
 }
 
-/** `phaseforge attack-report` for an audio container. */
+/** `phaseforge attack-report` for an audio cipher WAV. */
 export function audioRobustnessReport(
-  request: AttackReportRequest,
+  request: AudioAttackReportRequest,
 ): Promise<ServiceResult<RobustnessReport>> {
-  return notImplemented('attack-report', request.signal)
+  return postJson(
+    'attack-report',
+    'analysis/attack-report',
+    form({
+      ciphertext: request.ciphertext,
+      original: request.original,
+      passphrase: request.passphrase,
+      backend: request.backend,
+    }),
+    normalizeReport,
+    request.signal,
+  )
 }

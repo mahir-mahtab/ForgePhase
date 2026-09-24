@@ -139,3 +139,34 @@ Implement an operation-to-endpoint map, request field mapping, blob handling wit
 
 Run the audit probes from the workspace root with `backend\.venv\Scripts\python.exe audit\reproduce.py`. They are diagnostic reproductions, not a replacement for regression assertions in the existing suite.
 
+
+## Resolution status (2026-09-24)
+
+All findings above have been addressed. Regression tests live in
+`backend/tests/test_hardening.py` and are named after the finding they guard.
+
+| # | Finding | Resolution |
+| --- | --- | --- |
+| 1 | API cannot decrypt containers it produced | Image ciphertext is now a 16-bit PNG pair whose decode budget covers every padded shape encryption can produce. Verified live: a 513x513 RGB image encrypts to a 12 MB pair and decrypts exactly. |
+| 2 | Parameters bypass resource limits | `block_size` must be a power of two in [64, 65536], checked before the upload is decoded. KDF iterations are bounded to [1, 2,000,000] in `derive_key` itself, so every container path is covered. |
+| 3 | CPU work blocks the event loop | All decode/transform/encode work runs in worker threads behind a capacity limiter (`PHASEFORGE_MAX_JOBS`, default 2). Verified live: `/api/health` answered in 15-30 ms during a 2.4 s encryption. |
+| 4 | Watermark mirror wrong for odd sizes | Mirroring is parity-aware; round trips are exact (error < 1e-8) for even, odd and mixed carriers. |
+| 5 | Positions overlapping the mirror | `block_slice` requires the block to sit strictly in the upper half-plane and reports the valid range. `position_range` is ported to the UI, which blocks invalid positions before sending. |
+| 6 | Zero-energy channels, zero strength | Strength must be finite and positive; extraction skips channels with no spectral energy, and a fully black carrier is a clear 400. |
+| 7 | Malformed containers return 500 | Audio containers are validated as a whole (fields, types, salt, shape and block count against metadata, finiteness) before decryption; unreadable archives are 400. |
+| 8 | `noise_frames=0` produces NaN | `noise_frames >= 1` and all numeric DSP controls must be finite; DSP results are checked for finiteness before encoding. |
+| 9 | Custom backend is radix-2 only | The custom backend handles any length via Bluestein's algorithm over its own radix-2 FFT; filter, spectrum and watermark run on 63x65 carriers under it. |
+
+The frontend/API contract table is also resolved: every operation is wired to
+its real endpoint, binary responses are handled as files, robustness reports
+are normalized (`lib/report.ts`, with NaN and infinities parsed separately),
+and every processing route accepts a per-request `backend`, isolated per
+request with a context variable rather than a module global.
+
+Other gaps: `pyproject.toml` now has `api` and `dev` extras and a `phaseforge`
+console script; CLI commands shown in the UI quote their arguments; the
+frontend has a Vitest suite (`npm test`).
+
+The DRPE caveats stand: there is no integrity check, a wrong passphrase yields
+noise, and key reuse is fatal (demonstrated in the UI's key-reuse attack
+panel). This is still not production cryptography.

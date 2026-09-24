@@ -1,4 +1,3 @@
-import { Unlock } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
@@ -6,14 +5,18 @@ import { OperationShell } from '@/components/shared/OperationShell'
 import { PassphraseField } from '@/components/shared/PassphraseField'
 import { ResultPanel } from '@/components/shared/ResultPanel'
 import { useOperation } from '@/hooks/useOperation'
-import { ACCEPT_CONTAINER } from '@/lib/accept'
+import { ACCEPT_CIPHER_WAV } from '@/lib/accept'
+import { cliCommand } from '@/lib/cli'
 import { decryptAudio } from '@/services/audioService'
 import type { TransformBackend } from '@/services/types'
 
-const ICON = <Unlock className="size-4" aria-hidden />
+interface AudioDecryptPanelProps {
+  backend: TransformBackend
+  container: File | null
+  onContainerChange: (file: File | null) => void
+}
 
-export function AudioDecryptPanel({ backend }: { backend: TransformBackend }) {
-  const [container, setContainer] = useState<File | null>(null)
+export function AudioDecryptPanel({ backend, container, onContainerChange }: AudioDecryptPanelProps) {
   const [passphrase, setPassphrase] = useState('')
   const { state, execute, reset } = useOperation(decryptAudio)
 
@@ -25,52 +28,47 @@ export function AudioDecryptPanel({ backend }: { backend: TransformBackend }) {
     void execute({ container, passphrase, backend })
   }, [backend, container, execute, passphrase])
 
-  const command = [
-    'phaseforge --backend',
-    backend,
-    'audio-decrypt',
-    container?.name ?? '<cipher.npz>',
-    'restored.wav',
-  ].join(' ')
-
   return (
     <OperationShell
-      tone="audio"
-      icon={ICON}
-      title="Decrypt a container"
-      description="Reads the sample rate and block layout from the container's own metadata, rebuilds the masks, and inverts each block."
-      command="audio-decrypt"
-      runLabel="Decrypt audio"
+      title="Decrypt audio"
+      description="Reads the sample rate and block layout stored inside the encrypted WAV, rebuilds the masks from the passphrase, and restores the waveform."
+      runLabel="Decrypt"
       canRun={canRun}
-      blockedReason="Pick a .npz container and enter its passphrase"
+      blockedReason="Add the encrypted audio and the passphrase."
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
+      command={cliCommand(
+        'phaseforge', '--backend', backend, 'audio-decrypt',
+        container?.name ?? 'cipher.wav', 'restored.wav',
+      )}
       result={
         <ResultPanel
           state={state}
-          tone="audio"
-          idleHint="The recovered waveform appears here, ready to play back."
-          cliCommand={command}
+          idleHint="The restored audio appears here, ready to play."
+          note={
+            <p className="text-xs text-muted-foreground">
+              A wrong passphrase decrypts to loud noise, so check the volume
+              before pressing play.
+            </p>
+          }
         />
       }
     >
       <FileDropzone
-        label="Ciphertext container"
-        hint=".npz"
-        kind="container"
-        accept={ACCEPT_CONTAINER}
-        tone="audio"
+        label="Encrypted audio"
+        hint="the noisy cipher.wav"
+        kind="audio"
+        accept={ACCEPT_CIPHER_WAV}
         file={container}
-        onFileChange={setContainer}
+        onFileChange={onContainerChange}
         disabled={isRunning}
       />
-
       <PassphraseField
         value={passphrase}
         onChange={setPassphrase}
-        hint="A wrong passphrase produces noise at full level. Turn the volume down first."
+        hint="Must be the passphrase used to encrypt."
         disabled={isRunning}
       />
     </OperationShell>

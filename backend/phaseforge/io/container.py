@@ -32,12 +32,22 @@ def load_container(path):
         missing = {"data", "meta"} - set(archive.files)
         if missing:
             raise ValueError(f"not a PhaseForge container: missing {sorted(missing)}")
-        data = archive["data"]
-        metadata = json.loads(str(archive["meta"]))
+        try:
+            data = archive["data"]
+            metadata = json.loads(str(archive["meta"]))
+        except ValueError:
+            raise
+        except Exception as error:
+            raise ValueError("not a PhaseForge container: unreadable entries") from error
 
+    if not isinstance(metadata, dict):
+        raise ValueError("not a PhaseForge container: metadata must be an object")
     version = metadata.get("format_version")
     if version != FORMAT_VERSION:
         raise ValueError(f"unsupported container version {version!r}")
     if isinstance(metadata.get("salt"), str):
-        metadata["salt"] = base64.b64decode(metadata["salt"])
+        try:
+            metadata["salt"] = base64.b64decode(metadata["salt"], validate=True)
+        except ValueError:
+            raise ValueError("container has an invalid salt") from None
     return data, metadata

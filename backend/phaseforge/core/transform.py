@@ -13,6 +13,7 @@ here and shared by every backend rather than reimplemented per backend.
 """
 
 from contextlib import contextmanager
+from contextvars import ContextVar
 
 import numpy as np
 
@@ -24,7 +25,10 @@ _BACKENDS = {
 }
 
 _DEFAULT_BACKEND = numpy_backend.NAME
-_active = _DEFAULT_BACKEND
+# A context variable rather than a module global: the API runs requests
+# concurrently in worker threads, and one request selecting a backend must not
+# change the transform another request is in the middle of.
+_active = ContextVar("phaseforge_backend", default=_DEFAULT_BACKEND)
 
 
 def available_backends():
@@ -40,28 +44,31 @@ def register_backend(name, module):
 
 
 def get_backend():
-    return _active
+    return _active.get()
+
+
+def _check(name):
+    if name not in _BACKENDS:
+        raise ValueError(f"unknown backend {name!r}; available: {available_backends()}")
 
 
 def set_backend(name):
-    global _active
-    if name not in _BACKENDS:
-        raise ValueError(f"unknown backend {name!r}; available: {available_backends()}")
-    _active = name
+    _check(name)
+    _active.set(name)
 
 
 @contextmanager
 def using_backend(name):
-    previous = get_backend()
-    set_backend(name)
+    _check(name)
+    token = _active.set(name)
     try:
         yield
     finally:
-        set_backend(previous)
+        _active.reset(token)
 
 
 def _impl():
-    return _BACKENDS[_active]
+    return _BACKENDS[_active.get()]
 
 
 def fft(x, axis=-1):

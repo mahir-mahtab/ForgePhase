@@ -1,104 +1,169 @@
-import { ScanSearch, Stamp } from 'lucide-react'
+import { ArrowDown } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { ParamSlider } from '@/components/shared/ParamSlider'
 import { ResultPanel } from '@/components/shared/ResultPanel'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useImageSize } from '@/hooks/useImageSize'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_IMAGE } from '@/lib/accept'
-import {
-  IMAGE_DEFAULTS,
-  embedWatermark,
-  extractWatermark,
-} from '@/services/imageService'
+import { cliCommand } from '@/lib/cli'
+import { SAMPLES } from '@/lib/samples'
+import { positionRange } from '@/lib/watermark'
+import { IMAGE_DEFAULTS, embedWatermark, extractWatermark } from '@/services/imageService'
 import type { TransformBackend } from '@/services/types'
 
-const EMBED_ICON = <Stamp className="size-4" aria-hidden />
-const EXTRACT_ICON = <ScanSearch className="size-4" aria-hidden />
+const STRENGTH_HELP = 'Higher survives more damage but is easier to see.'
+const POSITION_HELP = 'How far above the centre of the spectrum the mark sits, as a fraction of the image height.'
 
-const STRENGTH_HELP =
-  'Embedding gain. Higher survives more compression and cropping, and is easier to see.'
-const POSITION_HELP =
-  'Radial placement as a fraction of the Nyquist limit. Mid-band hides best: low is visible, high is destroyed by compression.'
+/** What the embed step hands to the extract step for a one-click check. */
+interface ExtractInputs {
+  original: File
+  marked: File
+  height: number
+  width: number
+  strength: number
+  position: number
+}
 
-function EmbedPanel({ backend }: { backend: TransformBackend }) {
+/**
+ * The valid position range for the chosen files, and whether `position` is in
+ * it. Unknown sizes (nothing picked yet, or an undecodable format) do not
+ * block the run: the backend validates too.
+ */
+function usePositionCheck(
+  image: File | null,
+  markSize: { height: number; width: number } | null,
+  position: number,
+) {
+  const imageSize = useImageSize(image)
+  if (!imageSize || !markSize) return { range: null, fits: true, known: false }
+  const range = positionRange(imageSize.height, imageSize.width, markSize.height, markSize.width)
+  if (!range) return { range: null, fits: false, known: true }
+  return { range, fits: position >= range.min && position <= range.max, known: true }
+}
+
+function RangeHint({
+  check,
+}: {
+  check: ReturnType<typeof usePositionCheck>
+}) {
+  if (!check.known) return null
+  if (!check.range) {
+    return (
+      <p className="text-xs text-destructive">
+        The watermark is too large for this image. It must be under half the
+        image height and no wider than the image.
+      </p>
+    )
+  }
+  return (
+    <p className={check.fits ? 'text-xs text-muted-foreground' : 'text-xs text-destructive'}>
+      For these files the position must be between {check.range.min.toFixed(3)} and{' '}
+      {check.range.max.toFixed(3)}.
+    </p>
+  )
+}
+
+function EmbedPanel({
+  backend,
+  onSendToExtract,
+}: {
+  backend: TransformBackend
+  onSendToExtract: (inputs: ExtractInputs) => void
+}) {
   const [input, setInput] = useState<File | null>(null)
   const [watermark, setWatermark] = useState<File | null>(null)
-  const [strength, setStrength] = useState<number>(
-    IMAGE_DEFAULTS.watermarkStrength,
-  )
-  const [position, setPosition] = useState<number>(
-    IMAGE_DEFAULTS.watermarkPosition,
-  )
+  const [strength, setStrength] = useState<number>(IMAGE_DEFAULTS.watermarkStrength)
+  const [position, setPosition] = useState<number>(IMAGE_DEFAULTS.watermarkPosition)
   const { state, execute, reset } = useOperation(embedWatermark)
 
+  const markSize = useImageSize(watermark)
+  const check = usePositionCheck(
+    input,
+    markSize ? { height: markSize.height, width: markSize.width } : null,
+    position,
+  )
+
   const isRunning = state.phase === 'running'
-  const canRun = input !== null && watermark !== null
+  const canRun = input !== null && watermark !== null && check.fits
 
   const handleRun = useCallback(() => {
     if (!input || !watermark) return
     void execute({ input, watermark, strength, position, backend })
   }, [backend, execute, input, position, strength, watermark])
 
-  const command = [
-    'phaseforge --backend',
-    backend,
-    'watermark-embed',
-    input?.name ?? '<input>',
-    watermark?.name ?? '<mark>',
-    'marked.png --strength',
-    strength,
-    '--position',
-    position,
-  ].join(' ')
-
   return (
     <OperationShell
-      tone="image"
-      icon={EMBED_ICON}
       title="Embed a watermark"
-      description="Writes the mark into the magnitude spectrum at a fixed radius, so it survives operations that leave the spectrum broadly intact."
-      command="watermark-embed"
-      runLabel="Embed watermark"
+      description="Adds a greyscale mark to the magnitude spectrum, mirrored so the result stays a real image. Keep the original: extraction compares against it."
+      runLabel="Embed"
       canRun={canRun}
-      blockedReason="Pick a carrier image and a watermark"
+      blockedReason={
+        input === null || watermark === null
+          ? 'Choose an image and a watermark.'
+          : 'Adjust the position into the valid range.'
+      }
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
+      command={cliCommand(
+        'phaseforge', '--backend', backend, 'watermark-embed',
+        input?.name ?? 'input.png', watermark?.name ?? 'mark.png', 'watermarked.png',
+        '--strength', strength, '--position', position,
+      )}
       result={
         <ResultPanel
           state={state}
-          tone="image"
-          idleHint="The marked image appears here. Keep the original: extraction needs both."
-          cliCommand={command}
+          idleHint="The watermarked image appears here. It should look almost identical to the original."
+          actions={(result) =>
+            input && markSize ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  onSendToExtract({
+                    original: input,
+                    marked: result.artifact.file,
+                    height: markSize.height,
+                    width: markSize.width,
+                    strength,
+                    position,
+                  })
+                }
+              >
+                Check with Extract
+                <ArrowDown />
+              </Button>
+            ) : null
+          }
         />
       }
     >
       <FileDropzone
-        label="Carrier image"
+        label="Image"
         kind="image"
         accept={ACCEPT_IMAGE}
-        tone="image"
         file={input}
         onFileChange={setInput}
         disabled={isRunning}
+        sample={SAMPLES.image}
       />
-
       <FileDropzone
         label="Watermark"
-        hint="read as greyscale"
+        hint={markSize ? `${markSize.width} × ${markSize.height}, read as greyscale` : 'read as greyscale'}
         kind="image"
         accept={ACCEPT_IMAGE}
-        tone="image"
         file={watermark}
         onFileChange={setWatermark}
         disabled={isRunning}
+        sample={SAMPLES.watermark}
       />
-
       <ParamSlider
         label="Strength"
         description={STRENGTH_HELP}
@@ -109,46 +174,61 @@ function EmbedPanel({ backend }: { backend: TransformBackend }) {
         disabled={isRunning}
         onChange={setStrength}
       />
-
-      <ParamSlider
-        label="Position"
-        description={POSITION_HELP}
-        value={position}
-        min={0.05}
-        max={0.95}
-        step={0.01}
-        disabled={isRunning}
-        onChange={setPosition}
-      />
+      <div className="flex flex-col gap-1.5">
+        <ParamSlider
+          label="Position"
+          description={POSITION_HELP}
+          value={position}
+          min={0.01}
+          max={0.49}
+          step={0.01}
+          disabled={isRunning}
+          onChange={setPosition}
+        />
+        <RangeHint check={check} />
+      </div>
     </OperationShell>
   )
 }
 
-function ExtractPanel({ backend }: { backend: TransformBackend }) {
-  const [original, setOriginal] = useState<File | null>(null)
-  const [marked, setMarked] = useState<File | null>(null)
-  const [height, setHeight] = useState('64')
-  const [width, setWidth] = useState('64')
-  const [strength, setStrength] = useState<number>(
-    IMAGE_DEFAULTS.watermarkStrength,
-  )
-  const [position, setPosition] = useState<number>(
-    IMAGE_DEFAULTS.watermarkPosition,
-  )
+function ExtractPanel({
+  backend,
+  inputs,
+}: {
+  backend: TransformBackend
+  inputs: {
+    original: File | null
+    setOriginal: (file: File | null) => void
+    marked: File | null
+    setMarked: (file: File | null) => void
+    height: string
+    setHeight: (value: string) => void
+    width: string
+    setWidth: (value: string) => void
+    strength: number
+    setStrength: (value: number) => void
+    position: number
+    setPosition: (value: number) => void
+  }
+}) {
+  const { original, marked, height, width, strength, position } = inputs
   const { state, execute, reset } = useOperation(extractWatermark)
 
   const isRunning = state.phase === 'running'
-
-  // Parsed during render. Empty and non-numeric input both land on NaN, which
-  // the guards below reject without a separate validity flag to keep in sync.
-  const parsedHeight = Number.parseInt(height, 10)
-  const parsedWidth = Number.parseInt(width, 10)
-  const heightValid = Number.isInteger(parsedHeight) && parsedHeight > 0
-  const widthValid = Number.isInteger(parsedWidth) && parsedWidth > 0
-  const canRun = original !== null && marked !== null && heightValid && widthValid
+  const parsedHeight = Number(height)
+  const parsedWidth = Number(width)
+  const sizeValid =
+    Number.isInteger(parsedHeight) && parsedHeight > 0 &&
+    Number.isInteger(parsedWidth) && parsedWidth > 0
+  const check = usePositionCheck(
+    original,
+    sizeValid ? { height: parsedHeight, width: parsedWidth } : null,
+    position,
+  )
+  const canRun = original !== null && marked !== null && sizeValid && check.fits
 
   const handleRun = useCallback(() => {
-    if (!original || !marked || !heightValid || !widthValid) return
+    if (!original || !marked || !sizeValid) return
     void execute({
       original,
       marked,
@@ -158,133 +238,144 @@ function ExtractPanel({ backend }: { backend: TransformBackend }) {
       position,
       backend,
     })
-  }, [
-    backend,
-    execute,
-    heightValid,
-    marked,
-    original,
-    parsedHeight,
-    parsedWidth,
-    position,
-    strength,
-    widthValid,
-  ])
-
-  const command = [
-    'phaseforge --backend',
-    backend,
-    'watermark-extract',
-    original?.name ?? '<original>',
-    marked?.name ?? '<marked>',
-    'extracted.png --height',
-    heightValid ? parsedHeight : '?',
-    '--width',
-    widthValid ? parsedWidth : '?',
-    '--strength',
-    strength,
-    '--position',
-    position,
-  ].join(' ')
+  }, [backend, execute, marked, original, parsedHeight, parsedWidth, position, sizeValid, strength])
 
   return (
     <OperationShell
-      tone="image"
-      icon={EXTRACT_ICON}
       title="Extract a watermark"
-      description="Differences the marked spectrum against the original. The mark's own dimensions cannot be inferred, so they have to be supplied."
-      command="watermark-extract"
-      runLabel="Extract watermark"
+      description="Compares the spectra of the original and the watermarked image. The watermark size, strength and position must match what was used to embed it."
+      runLabel="Extract"
       canRun={canRun}
-      blockedReason="Needs both images and a positive watermark size"
+      blockedReason={
+        original === null || marked === null
+          ? 'Choose the original and the watermarked image.'
+          : !sizeValid
+            ? 'Enter the watermark size in pixels.'
+            : 'Adjust the position into the valid range.'
+      }
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
+      command={cliCommand(
+        'phaseforge', '--backend', backend, 'watermark-extract',
+        original?.name ?? 'original.png', marked?.name ?? 'watermarked.png', 'extracted.png',
+        '--height', sizeValid ? parsedHeight : '?', '--width', sizeValid ? parsedWidth : '?',
+        '--strength', strength, '--position', position,
+      )}
       result={
         <ResultPanel
           state={state}
-          tone="image"
-          idleHint="The recovered mark appears here, normalised for display."
-          cliCommand={command}
+          idleHint="The recovered watermark appears here, contrast-stretched for display."
         />
       }
     >
-      <FileDropzone
-        label="Original image"
-        kind="image"
-        accept={ACCEPT_IMAGE}
-        tone="image"
-        file={original}
-        onFileChange={setOriginal}
-        disabled={isRunning}
-      />
-
-      <FileDropzone
-        label="Marked image"
-        kind="image"
-        accept={ACCEPT_IMAGE}
-        tone="image"
-        file={marked}
-        onFileChange={setMarked}
-        disabled={isRunning}
-      />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FileDropzone
+          label="Original image"
+          kind="image"
+          accept={ACCEPT_IMAGE}
+          file={original}
+          onFileChange={inputs.setOriginal}
+          disabled={isRunning}
+        />
+        <FileDropzone
+          label="Watermarked image"
+          kind="image"
+          accept={ACCEPT_IMAGE}
+          file={marked}
+          onFileChange={inputs.setMarked}
+          disabled={isRunning}
+        />
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="watermark-height">Watermark height</Label>
-          <Input
-            id="watermark-height"
-            inputMode="numeric"
-            value={height}
-            aria-invalid={!heightValid}
-            disabled={isRunning}
-            onChange={(event) => setHeight(event.target.value)}
-          />
-        </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           <Label htmlFor="watermark-width">Watermark width</Label>
           <Input
             id="watermark-width"
+            type="number"
+            min={1}
             inputMode="numeric"
             value={width}
-            aria-invalid={!widthValid}
+            aria-invalid={!sizeValid}
             disabled={isRunning}
-            onChange={(event) => setWidth(event.target.value)}
+            onChange={(event) => inputs.setWidth(event.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="watermark-height">Watermark height</Label>
+          <Input
+            id="watermark-height"
+            type="number"
+            min={1}
+            inputMode="numeric"
+            value={height}
+            aria-invalid={!sizeValid}
+            disabled={isRunning}
+            onChange={(event) => inputs.setHeight(event.target.value)}
           />
         </div>
       </div>
 
       <ParamSlider
         label="Strength"
-        description="Must match the value used at embed time."
+        description="Must match the embed step."
         value={strength}
         min={0.01}
         max={1}
         step={0.01}
         disabled={isRunning}
-        onChange={setStrength}
+        onChange={inputs.setStrength}
       />
-
-      <ParamSlider
-        label="Position"
-        description="Must match the value used at embed time."
-        value={position}
-        min={0.05}
-        max={0.95}
-        step={0.01}
-        disabled={isRunning}
-        onChange={setPosition}
-      />
+      <div className="flex flex-col gap-1.5">
+        <ParamSlider
+          label="Position"
+          description="Must match the embed step."
+          value={position}
+          min={0.01}
+          max={0.49}
+          step={0.01}
+          disabled={isRunning}
+          onChange={inputs.setPosition}
+        />
+        <RangeHint check={check} />
+      </div>
     </OperationShell>
   )
 }
 
 export function WatermarkPanel({ backend }: { backend: TransformBackend }) {
+  // Extract inputs live here so a finished embed can fill them in.
+  const [original, setOriginal] = useState<File | null>(null)
+  const [marked, setMarked] = useState<File | null>(null)
+  const [height, setHeight] = useState('32')
+  const [width, setWidth] = useState('32')
+  const [strength, setStrength] = useState<number>(IMAGE_DEFAULTS.watermarkStrength)
+  const [position, setPosition] = useState<number>(IMAGE_DEFAULTS.watermarkPosition)
+
+  const sendToExtract = useCallback((inputs: ExtractInputs) => {
+    setOriginal(inputs.original)
+    setMarked(inputs.marked)
+    setHeight(String(inputs.height))
+    setWidth(String(inputs.width))
+    setStrength(inputs.strength)
+    setPosition(inputs.position)
+    document.getElementById('watermark-extract')?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
+
   return (
     <div className="flex flex-col gap-6">
-      <EmbedPanel backend={backend} />
-      <ExtractPanel backend={backend} />
+      <EmbedPanel backend={backend} onSendToExtract={sendToExtract} />
+      <div id="watermark-extract" className="scroll-mt-20">
+        <ExtractPanel
+          backend={backend}
+          inputs={{
+            original, setOriginal, marked, setMarked, height, setHeight,
+            width, setWidth, strength, setStrength, position, setPosition,
+          }}
+        />
+      </div>
     </div>
   )
 }

@@ -7,14 +7,13 @@
       name="description"
       content="PhaseForge - Fourier-domain image and audio security toolkit."
     />
-    <meta name="color-scheme" content="dark light" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
+      href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Figtree:wght@400;500;600;700&display=swap"
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Spline+Sans+Mono:wght@300..700&display=swap"
     />
 
     <title>PhaseForge</title>
@@ -31,13 +30,13 @@
           var theme =
             stored === 'light' || stored === 'dark'
               ? stored
-              : window.matchMedia('(prefers-color-scheme: light)').matches
-                ? 'light'
-                : 'dark';
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
           document.documentElement.classList.toggle('dark', theme === 'dark');
           document.documentElement.style.colorScheme = theme;
         } catch (e) {
-          document.documentElement.classList.add('dark');
+          document.documentElement.style.colorScheme = 'light';
         }
       })();
     </script>

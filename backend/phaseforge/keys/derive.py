@@ -16,6 +16,9 @@ import secrets
 import numpy as np
 
 DEFAULT_ITERATIONS = 200_000
+# Ciphertexts arrive from users and carry their own iteration count, so an
+# upper bound stops a crafted file from pinning a CPU inside PBKDF2.
+MAX_ITERATIONS = 2_000_000
 SALT_BYTES = 16
 _KEY_BYTES = 32
 
@@ -27,9 +30,18 @@ def new_salt():
 
 def derive_key(passphrase, salt, iterations=DEFAULT_ITERATIONS):
     """Stretch a passphrase into a 32-byte master key (PBKDF2-HMAC-SHA256)."""
+    validate_iterations(iterations)
     if isinstance(passphrase, str):
         passphrase = passphrase.encode("utf-8")
     return hashlib.pbkdf2_hmac("sha256", passphrase, salt, iterations, _KEY_BYTES)
+
+
+def validate_iterations(iterations):
+    """Reject iteration counts that are not a positive, bounded integer."""
+    if isinstance(iterations, bool) or not isinstance(iterations, (int, np.integer)):
+        raise ValueError(f"KDF iterations must be an integer, got {iterations!r}")
+    if not 1 <= iterations <= MAX_ITERATIONS:
+        raise ValueError(f"KDF iterations must be in [1, {MAX_ITERATIONS}], got {iterations}")
 
 
 def masks_from_key(key, shape, count=2, index=0):

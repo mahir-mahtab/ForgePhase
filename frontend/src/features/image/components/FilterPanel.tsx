@@ -1,12 +1,10 @@
-import { SlidersHorizontal } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { ParamSlider } from '@/components/shared/ParamSlider'
 import { ResultPanel } from '@/components/shared/ResultPanel'
-import { MaskPreview } from '@/features/image/components/MaskPreview'
-import type { MaskParams } from '@/lib/mask'
+import { SegmentedControl } from '@/components/shared/SegmentedControl'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -15,55 +13,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { MaskPreview } from '@/features/image/components/MaskPreview'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_IMAGE } from '@/lib/accept'
-import { cn } from '@/lib/utils'
+import { cliCommand } from '@/lib/cli'
+import type { MaskParams } from '@/lib/mask'
+import { SAMPLES } from '@/lib/samples'
 import { IMAGE_DEFAULTS, applyFilter } from '@/services/imageService'
-import type {
-  FilterKind,
-  FilterShape,
-  TransformBackend,
-} from '@/services/types'
+import type { FilterKind, FilterShape, TransformBackend } from '@/services/types'
 
-const ICON = <SlidersHorizontal className="size-4" aria-hidden />
-
-const KINDS: ReadonlyArray<{
-  value: FilterKind
-  label: string
-  hint: string
-}> = [
-  { value: 'low', label: 'Low-pass', hint: 'Keeps structure, drops detail' },
-  { value: 'high', label: 'High-pass', hint: 'Keeps edges, drops flat areas' },
-  { value: 'band', label: 'Band-pass', hint: 'Keeps one ring of frequencies' },
+const KINDS: ReadonlyArray<{ value: FilterKind; label: string }> = [
+  { value: 'low', label: 'Low-pass' },
+  { value: 'high', label: 'High-pass' },
+  { value: 'band', label: 'Band-pass' },
 ]
 
-const SHAPES: ReadonlyArray<{ value: FilterShape; label: string }> = [
-  { value: 'gaussian', label: 'Gaussian' },
-  { value: 'butterworth', label: 'Butterworth' },
-  { value: 'ideal', label: 'Ideal' },
-]
-
-const SHAPE_NOTES: Record<FilterShape, string> = {
-  gaussian: 'Smooth roll-off. No ringing, but the cutoff is soft.',
-  butterworth: 'Roll-off steepness set by the order. A middle ground.',
-  ideal: 'A hard wall in the spectrum. Sharpest cut, and it rings visibly.',
+const KIND_NOTES: Record<FilterKind, string> = {
+  low: 'Keeps broad shapes and removes fine detail, like a blur.',
+  high: 'Keeps edges and texture and removes smooth areas.',
+  band: 'Keeps one ring of frequencies between the two cutoffs.',
 }
+
+const SHAPES: ReadonlyArray<{ value: FilterShape; label: string; note: string }> = [
+  { value: 'gaussian', label: 'Gaussian', note: 'Smooth roll-off, no ringing.' },
+  { value: 'butterworth', label: 'Butterworth', note: 'Steepness set by the order.' },
+  { value: 'ideal', label: 'Ideal', note: 'Hard cut; causes visible ringing.' },
+]
 
 export function FilterPanel({ backend }: { backend: TransformBackend }) {
   const [input, setInput] = useState<File | null>(null)
   const [kind, setKind] = useState<FilterKind>('low')
   const [cutoff, setCutoff] = useState<number>(IMAGE_DEFAULTS.filterCutoff)
-  const [highCutoff, setHighCutoff] = useState<number>(
-    IMAGE_DEFAULTS.filterHighCutoff,
-  )
+  const [highCutoff, setHighCutoff] = useState<number>(IMAGE_DEFAULTS.filterHighCutoff)
   const [filterShape, setFilterShape] = useState<FilterShape>('gaussian')
   const [order, setOrder] = useState<number>(IMAGE_DEFAULTS.filterOrder)
   const { state, execute, reset } = useOperation(applyFilter)
 
   const isRunning = state.phase === 'running'
-
-  // Both derived during render. The backend rejects a band whose upper edge is
-  // not above the lower one, so the button is blocked before the round trip.
   const isBand = kind === 'band'
   const bandValid = !isBand || highCutoff > cutoff
   const canRun = input !== null && bandValid
@@ -79,123 +65,65 @@ export function FilterPanel({ backend }: { backend: TransformBackend }) {
       order,
       backend,
     })
-  }, [
-    backend,
-    bandValid,
-    cutoff,
-    execute,
-    filterShape,
-    highCutoff,
-    input,
-    isBand,
-    kind,
-    order,
-  ])
+  }, [backend, bandValid, cutoff, execute, filterShape, highCutoff, input, isBand, kind, order])
 
   const maskParams = useMemo<MaskParams>(
-    () => ({
-      kind,
-      cutoff,
-      highCutoff: isBand ? highCutoff : null,
-      shape: filterShape,
-      order,
-    }),
+    () => ({ kind, cutoff, highCutoff: isBand ? highCutoff : null, shape: filterShape, order }),
     [cutoff, filterShape, highCutoff, isBand, kind, order],
   )
 
-  const command = [
-    'phaseforge --backend',
-    backend,
-    'filter',
-    input?.name ?? '<input>',
-    'filtered.png --kind',
-    kind,
-    '--cutoff',
-    cutoff,
-    isBand ? `--high-cutoff ${highCutoff}` : '',
-    '--filter-shape',
-    filterShape,
-    filterShape === 'butterworth' ? `--order ${order}` : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-
   return (
     <OperationShell
-      tone="image"
-      icon={ICON}
-      title="Frequency-domain filtering"
-      description="Builds a radial gain mask over the shifted spectrum, applies it, and transforms back. Cutoffs are fractions of the Nyquist limit, so they do not depend on image size."
-      command="filter"
+      title="Frequency filter"
+      description="Applies a radial gain mask to the image's spectrum and transforms back. Cutoffs are fractions of the highest frequency, so they work at any image size."
       runLabel="Apply filter"
       canRun={canRun}
-      blockedReason={
-        input === null
-          ? 'Pick an image'
-          : 'Band-pass needs an upper cutoff above the lower one'
-      }
+      blockedReason={input === null ? 'Choose an image.' : 'The upper cutoff must be above the lower one.'}
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
+      command={cliCommand(
+        'phaseforge', '--backend', backend, 'filter', input?.name ?? 'input.png', 'filtered.png',
+        '--kind', kind, '--cutoff', cutoff, isBand && '--high-cutoff', isBand && highCutoff,
+        '--filter-shape', filterShape, filterShape === 'butterworth' && '--order',
+        filterShape === 'butterworth' && order,
+      )}
       result={
         <>
+          <ResultPanel
+            state={state}
+            idleHint="The filtered image appears here. Adjust the settings and watch the mask preview below."
+          />
           <MaskPreview params={maskParams} />
-          {state.phase === 'idle' ? null : (
-            <ResultPanel
-              state={state}
-              tone="image"
-              idleHint=""
-              cliCommand={command}
-            />
-          )}
         </>
       }
     >
       <FileDropzone
-        label="Source image"
+        label="Image"
         kind="image"
         accept={ACCEPT_IMAGE}
-        tone="image"
         file={input}
         onFileChange={setInput}
         disabled={isRunning}
+        sample={SAMPLES.image}
       />
 
-      <div className="flex flex-col gap-2">
-        <Label>Filter kind</Label>
-        <div className="grid grid-cols-3 gap-2">
-          {KINDS.map((option) => {
-            const isActive = option.value === kind
-            return (
-              <button
-                key={option.value}
-                type="button"
-                disabled={isRunning}
-                aria-pressed={isActive}
-                onClick={() => setKind(option.value)}
-                className={cn(
-                  'rounded-lg border px-3 py-2.5 text-left transition-colors disabled:opacity-60',
-                  isActive
-                    ? 'border-image bg-image-wash text-image'
-                    : 'border-border text-muted-foreground hover:bg-secondary hover:text-foreground',
-                )}
-              >
-                <span className="block text-sm font-medium">
-                  {option.label}
-                </span>
-                <span className="mt-0.5 block text-xs opacity-80">
-                  {option.hint}
-                </span>
-              </button>
-            )
-          })}
-        </div>
+      <div className="flex flex-col gap-1.5">
+        <Label>Filter type</Label>
+        <SegmentedControl
+          label="Filter type"
+          value={kind}
+          options={KINDS}
+          onChange={setKind}
+          disabled={isRunning}
+        />
+        <p className="text-xs text-muted-foreground">{KIND_NOTES[kind]}</p>
       </div>
 
       <ParamSlider
         label={isBand ? 'Lower cutoff' : 'Cutoff'}
-        description="0 is DC, 1 is the edge of the spectrum."
+        description="0 is the centre of the spectrum (DC), 1 its edge."
         value={cutoff}
         min={0.02}
         max={1.4}
@@ -205,19 +133,23 @@ export function FilterPanel({ backend }: { backend: TransformBackend }) {
       />
 
       {isBand ? (
-        <ParamSlider
-          label="Upper cutoff"
-          description="Must sit above the lower cutoff."
-          value={highCutoff}
-          min={0.02}
-          max={1.4}
-          step={0.01}
-          disabled={isRunning}
-          onChange={setHighCutoff}
-        />
+        <div className="flex flex-col gap-1.5">
+          <ParamSlider
+            label="Upper cutoff"
+            value={highCutoff}
+            min={0.02}
+            max={1.4}
+            step={0.01}
+            disabled={isRunning}
+            onChange={setHighCutoff}
+          />
+          {!bandValid ? (
+            <p className="text-xs text-destructive">Must be above the lower cutoff.</p>
+          ) : null}
+        </div>
       ) : null}
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor="filter-shape">Mask shape</Label>
         <Select
           value={filterShape}
@@ -236,14 +168,14 @@ export function FilterPanel({ backend }: { backend: TransformBackend }) {
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          {SHAPE_NOTES[filterShape]}
+          {SHAPES.find((shape) => shape.value === filterShape)?.note}
         </p>
       </div>
 
       {filterShape === 'butterworth' ? (
         <ParamSlider
           label="Order"
-          description="Higher is a steeper roll-off, approaching the ideal mask."
+          description="Higher is steeper, approaching the ideal mask."
           value={order}
           min={1}
           max={10}

@@ -67,7 +67,13 @@ def decrypt(ciphertext, passphrase, metadata):
     if metadata.get("kind") != "image":
         raise ValueError(f"expected image ciphertext, got kind={metadata.get('kind')!r}")
 
+    for field in ("salt", "iterations", "original_shape"):
+        if field not in metadata:
+            raise ValueError(f"image ciphertext metadata is missing {field!r}")
+
     ciphertext = np.asarray(ciphertext)
+    if ciphertext.ndim != 3:
+        raise ValueError(f"image ciphertext must be 3D, got shape {ciphertext.shape}")
     key = derive.derive_key(passphrase, metadata["salt"], metadata["iterations"])
     mask_a, mask_b = _channel_masks(key, ciphertext.shape[0], ciphertext.shape[-2:])
 

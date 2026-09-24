@@ -1,9 +1,13 @@
-"""PNG codec for image DRPE ciphertext pairs.
+"""PNG codec for image DRPE ciphertext.
 
 The image transform produces complex values, while ordinary image formats only
-store real pixels.  This module stores the real and imaginary components as
-two 16-bit grayscale PNGs.  Colour channels are stacked vertically and the
-non-secret transform metadata is duplicated in both files as PNG text data.
+store real pixels.  The default format is a single 16-bit grayscale PNG that
+looks like pure noise: every real plane is stacked above every imaginary plane,
+colour channels one after another, and the non-secret transform metadata rides
+along as PNG text data.
+
+The older two-file format (separate real and imaginary PNGs) is still readable
+through :func:`decode_pair`.
 """
 
 import base64
@@ -20,7 +24,7 @@ from ..keys import derive
 
 FORMAT_VERSION = 1
 METADATA_KEY = "phaseforge"
-COMPONENTS = {"real", "imaginary"}
+COMPONENTS = {"real", "imaginary", "complex"}
 _UINT16_MAX = np.iinfo(np.uint16).max
 
 
@@ -28,8 +32,34 @@ class CipherImageTooLarge(ValueError):
     """Raised before decoding a cipher PNG that exceeds configured limits."""
 
 
-def encode_pair(ciphertext, metadata):
-    """Return ``(real_png, imaginary_png)`` for a complex image ciphertext."""
+def encode(ciphertext, metadata):
+    """Return one noise-like PNG holding a complex image ciphertext."""
+    ciphertext, common = _prepare(ciphertext, metadata)
+    planes = np.concatenate([np.real(ciphertext), np.imag(ciphertext)], axis=0)
+    return _encode_component(planes, "complex", common)
+
+
+def decode(payload, *, max_original_pixels=None, max_cipher_pixels=None):
+    """Decode and validate a single cipher PNG made by :func:`encode`.
+
+    Returns ``(complex_ciphertext, metadata)``, as :func:`decode_pair` does.
+    """
+    planes, raw = _decode_component(payload, "complex", max_cipher_pixels, planes=2)
+    channels = planes.shape[0] // 2
+    ciphertext = planes[:channels] + 1j * planes[channels:]
+    return ciphertext, _validated_metadata(raw, ciphertext.shape, max_original_pixels)
+
+
+def is_cipher_png(payload):
+    """True if ``payload`` is a PNG carrying PhaseForge cipher metadata."""
+    try:
+        with Image.open(io.BytesIO(payload)) as image:
+            return image.format == "PNG" and METADATA_KEY in image.info
+    except Exception:
+        return False
+
+
+def _prepare(ciphertext, metadata):
     ciphertext = np.asarray(ciphertext)
     if ciphertext.ndim != 3 or not np.iscomplexobj(ciphertext):
         raise ValueError("image ciphertext must be a 3D complex array")
@@ -37,11 +67,10 @@ def encode_pair(ciphertext, metadata):
         raise ValueError("image ciphertext contains non-finite values")
 
     channels, height, width = ciphertext.shape
-    pair_id = secrets.token_hex(16)
     common = {
         "format_version": FORMAT_VERSION,
         "kind": "image",
-        "pair_id": pair_id,
+        "pair_id": secrets.token_hex(16),
         "salt": base64.b64encode(_salt_bytes(metadata.get("salt"))).decode("ascii"),
         "iterations": int(metadata["iterations"]),
         "original_shape": [int(value) for value in metadata["original_shape"]],
@@ -51,7 +80,12 @@ def encode_pair(ciphertext, metadata):
     }
     if common["padded_shape"] != [channels, height, width]:
         raise ValueError("ciphertext shape does not match padded_shape metadata")
+    return ciphertext, common
 
+
+def encode_pair(ciphertext, metadata):
+    """Return ``(real_png, imaginary_png)`` for a complex image ciphertext."""
+    ciphertext, common = _prepare(ciphertext, metadata)
     return (
         _encode_component(np.real(ciphertext), "real", common),
         _encode_component(np.imag(ciphertext), "imaginary", common),
@@ -79,45 +113,50 @@ def decode_pair(real_payload, imaginary_payload, *, max_original_pixels=None,
 
     if real.shape != imaginary.shape:
         raise ValueError("real and imaginary ciphertexts must have matching dimensions")
-    padded_shape = _shape(real_meta.get("padded_shape"), "padded_shape")
-    if tuple(padded_shape) != real.shape:
-        raise ValueError("cipher component dimensions do not match padded_shape")
-    original_shape = _shape(real_meta.get("original_shape"), "original_shape")
+    metadata = _validated_metadata(real_meta, real.shape, max_original_pixels)
+    return real + 1j * imaginary, metadata
+
+
+def _validated_metadata(raw, shape, max_original_pixels=None):
+    """Check stored metadata against the decoded array; return DRPE metadata."""
+    padded_shape = _shape(raw.get("padded_shape"), "padded_shape")
+    if tuple(padded_shape) != tuple(shape):
+        raise ValueError("cipher dimensions do not match padded_shape")
+    original_shape = _shape(raw.get("original_shape"), "original_shape")
     if max_original_pixels is not None and original_shape[1] * original_shape[2] > max_original_pixels:
         raise CipherImageTooLarge("original image exceeds the pixel limit")
     if original_shape[0] != padded_shape[0]:
         raise ValueError("original and padded channel counts must match")
     if any(original > padded for original, padded in zip(original_shape, padded_shape)):
         raise ValueError("original_shape cannot exceed padded_shape")
-    if real_meta.get("kind") != "image":
-        raise ValueError("cipher pair is not an image ciphertext")
+    if raw.get("kind") != "image":
+        raise ValueError("cipher is not an image ciphertext")
 
     try:
-        salt = base64.b64decode(real_meta["salt"], validate=True)
+        salt = base64.b64decode(raw["salt"], validate=True)
     except (KeyError, ValueError):
-        raise ValueError("cipher pair contains an invalid salt") from None
+        raise ValueError("cipher contains an invalid salt") from None
     if len(salt) != derive.SALT_BYTES:
-        raise ValueError("cipher pair contains an invalid salt length")
+        raise ValueError("cipher contains an invalid salt length")
 
     try:
-        iterations = int(real_meta["iterations"])
+        iterations = int(raw["iterations"])
     except (KeyError, TypeError, ValueError):
-        raise ValueError("cipher pair contains invalid KDF iterations") from None
-    if iterations <= 0:
-        raise ValueError("cipher pair KDF iterations must be positive")
-    mode = real_meta.get("mode")
+        raise ValueError("cipher contains invalid KDF iterations") from None
+    if not 1 <= iterations <= derive.MAX_ITERATIONS:
+        raise ValueError("cipher KDF iterations are out of range")
+    mode = raw.get("mode")
     if mode not in ("L", "RGB"):
-        raise ValueError("cipher pair contains an unsupported image mode")
+        raise ValueError("cipher contains an unsupported image mode")
 
-    metadata = {
+    return {
         "kind": "image",
         "salt": salt,
         "iterations": iterations,
         "original_shape": original_shape,
         "padded_shape": padded_shape,
+        "mode": mode,
     }
-    metadata["mode"] = mode
-    return real + 1j * imaginary, metadata
 
 
 def _encode_component(component, name, common):
@@ -144,7 +183,7 @@ def _encode_component(component, name, common):
     return buffer.getvalue()
 
 
-def _decode_component(payload, expected_component, max_cipher_pixels=None):
+def _decode_component(payload, expected_component, max_cipher_pixels=None, planes=1):
     try:
         with Image.open(io.BytesIO(payload)) as image:
             if image.format != "PNG":
@@ -170,6 +209,7 @@ def _decode_component(payload, expected_component, max_cipher_pixels=None):
             if image.mode != "I;16":
                 raise ValueError("cipher component must be a 16-bit grayscale PNG")
             channels, height, width = _shape(metadata.get("padded_shape"), "padded_shape")
+            channels *= planes
             if max_cipher_pixels is not None and channels * height * width > max_cipher_pixels:
                 raise CipherImageTooLarge("cipher component exceeds the pixel limit")
             pixels = np.asarray(image).copy()

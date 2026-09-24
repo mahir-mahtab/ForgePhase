@@ -2,7 +2,6 @@
 
 import io
 import json
-import zipfile
 
 import numpy as np
 import pytest
@@ -41,11 +40,6 @@ def read_wav(payload):
     return audio_io.load_audio(io.BytesIO(payload))[0]
 
 
-def cipher_pair(payload):
-    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-        return archive.read("cipher-real.png"), archive.read("cipher-imaginary.png")
-
-
 @pytest.fixture
 def image():
     y, x = np.mgrid[0:64, 0:64] / 64
@@ -80,13 +74,14 @@ def test_image_encrypt_decrypt_round_trip(client, image):
                             files={"file": ("in.png", png_bytes(image), "image/png")},
                             data={"passphrase": PASSPHRASE})
     assert encrypted.status_code == 200
-    assert encrypted.headers["content-type"] == "application/zip"
-    assert "cipher-pair.zip" in encrypted.headers["content-disposition"]
-    real, imaginary = cipher_pair(encrypted.content)
+    assert encrypted.headers["content-type"] == "image/png"
+    assert "cipher.png" in encrypted.headers["content-disposition"]
+    # The ciphertext itself is one ordinary-looking PNG with no trace of the image.
+    assert abs(metrics.normalized_correlation(
+        image[0], image_io.load_image(io.BytesIO(encrypted.content))[0][0, :64, :64])) < 0.1
 
     decrypted = client.post("/api/image/decrypt",
-                            files={"real_file": ("cipher-real.png", real),
-                                   "imaginary_file": ("cipher-imaginary.png", imaginary)},
+                            files={"file": ("cipher.png", encrypted.content)},
                             data={"passphrase": PASSPHRASE})
     assert decrypted.status_code == 200
     assert metrics.psnr(image, read_png(decrypted.content)) > 40
@@ -96,10 +91,8 @@ def test_image_wrong_passphrase_returns_noise(client, image):
     encrypted = client.post("/api/image/encrypt",
                             files={"file": ("in.png", png_bytes(image), "image/png")},
                             data={"passphrase": PASSPHRASE})
-    real, imaginary = cipher_pair(encrypted.content)
     decrypted = client.post("/api/image/decrypt",
-                            files={"real_file": ("cipher-real.png", real),
-                                   "imaginary_file": ("cipher-imaginary.png", imaginary)},
+                            files={"file": ("cipher.png", encrypted.content)},
                             data={"passphrase": "the wrong one"})
 
     assert decrypted.status_code == 200  # DRPE has no integrity check to fail on
@@ -111,9 +104,15 @@ def test_audio_encrypt_decrypt_round_trip(client, signal):
                             files={"file": ("in.wav", wav_bytes(signal), "audio/wav")},
                             data={"passphrase": PASSPHRASE})
     assert encrypted.status_code == 200
+    assert encrypted.headers["content-type"] == "audio/wav"
+    assert "cipher.wav" in encrypted.headers["content-disposition"]
+    # The cipher is itself a playable WAV that sounds like noise.
+    noise = read_wav(encrypted.content)
+    assert noise.shape[0] == signal.shape[0]
+    assert abs(metrics.normalized_correlation(signal, noise[:, :signal.shape[1]])) < 0.1
 
     decrypted = client.post("/api/audio/decrypt",
-                            files={"file": ("cipher.npz", encrypted.content)},
+                            files={"file": ("cipher.wav", encrypted.content)},
                             data={"passphrase": PASSPHRASE})
     assert decrypted.status_code == 200
     recovered = read_wav(decrypted.content)
@@ -134,10 +133,10 @@ def test_container_kind_is_enforced(client, image, signal):
                             files={"file": ("in.png", png_bytes(image), "image/png")},
                             data={"passphrase": PASSPHRASE})
     response = client.post("/api/audio/decrypt",
-                           files={"file": ("cipher-pair.zip", encrypted.content)},
+                           files={"file": ("cipher.png", encrypted.content)},
                            data={"passphrase": PASSPHRASE})
     assert response.status_code == 400
-    assert "PhaseForge container" in response.json()["detail"]
+    assert "cipher WAV" in response.json()["detail"]
 
 
 def test_spectrum_of_image(client, image):
@@ -151,10 +150,8 @@ def test_spectrum_of_ciphertext_is_noise(client, image):
     encrypted = client.post("/api/image/encrypt",
                             files={"file": ("in.png", png_bytes(image), "image/png")},
                             data={"passphrase": PASSPHRASE})
-    real, imaginary = cipher_pair(encrypted.content)
     response = client.post("/api/image/spectrum",
-                           files={"real_file": ("cipher-real.png", real),
-                                  "imaginary_file": ("cipher-imaginary.png", imaginary)})
+                           files={"file": ("cipher.png", encrypted.content)})
     assert response.status_code == 200
     assert abs(metrics.normalized_correlation(image, read_png(response.content))) < 0.2
 
@@ -255,8 +252,7 @@ def test_attack_report(client, image):
                             data={"passphrase": PASSPHRASE})
     response = client.post(
         "/api/analysis/attack-report",
-        files={"real_file": ("cipher-real.png", cipher_pair(encrypted.content)[0]),
-               "imaginary_file": ("cipher-imaginary.png", cipher_pair(encrypted.content)[1]),
+        files={"ciphertext": ("cipher.png", encrypted.content),
                "original": ("in.png", png_bytes(image), "image/png")},
         data={"passphrase": PASSPHRASE})
 
@@ -274,7 +270,7 @@ def test_attack_report_on_audio(client, signal):
                             data={"passphrase": PASSPHRASE})
     response = client.post(
         "/api/analysis/attack-report",
-        files={"ciphertext": ("cipher.npz", encrypted.content),
+        files={"ciphertext": ("cipher.wav", encrypted.content),
                "original": ("in.wav", wav_bytes(signal), "audio/wav")},
         data={"passphrase": PASSPHRASE})
 
@@ -321,10 +317,9 @@ def test_oversized_image_rejected(client):
     assert "limit" in response.json()["detail"]
 
 
-def test_corrupt_cipher_pair_rejected(client):
+def test_corrupt_cipher_rejected(client):
     response = client.post("/api/image/decrypt",
-                           files={"real_file": ("real.png", b"not a png"),
-                                  "imaginary_file": ("imaginary.png", b"not a png")},
+                           files={"file": ("cipher.png", b"not a png")},
                            data={"passphrase": PASSPHRASE})
     assert response.status_code == 400
     assert "cipher" in response.json()["detail"] or "PNG" in response.json()["detail"]
@@ -334,17 +329,16 @@ def test_foreign_npz_rejected(client):
     buffer = io.BytesIO()
     np.savez(buffer, unrelated=np.zeros(4))
     response = client.post("/api/image/decrypt",
-                           files={"real_file": ("foreign.png", buffer.getvalue()),
-                                  "imaginary_file": ("foreign.png", buffer.getvalue())},
+                           files={"file": ("foreign.png", buffer.getvalue())},
                            data={"passphrase": PASSPHRASE})
     assert response.status_code == 400
 
 
-def test_cipher_pair_requires_both_components(client):
+def test_plain_image_is_not_a_cipher(client, image):
     response = client.post("/api/image/decrypt",
-                           files={"real_file": ("real.png", b"not a png")},
+                           files={"file": ("in.png", png_bytes(image))},
                            data={"passphrase": PASSPHRASE})
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 def test_passphrase_is_required(client, image):
