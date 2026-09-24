@@ -34,21 +34,28 @@ export interface BaseOptions {
   signal?: AbortSignal
 }
 
+export type KeyMode = 'passphrase' | 'image' | 'audio'
+
+/** Options for specifying cryptographic key material. */
+export interface KeyOptions {
+  keyMode?: KeyMode
+  passphrase?: string
+  keyFile?: File | null
+}
+
 /* -------------------------------------------------------------------------- */
 /* Requests                                                                    */
 /* -------------------------------------------------------------------------- */
 
-export interface ImageEncryptRequest extends BaseOptions {
+export interface ImageEncryptRequest extends BaseOptions, KeyOptions {
   input: File
-  passphrase: string
   /** Collapse to a single channel before transforming. */
   greyscale: boolean
 }
 
-export interface ImageDecryptRequest extends BaseOptions {
+export interface ImageDecryptRequest extends BaseOptions, KeyOptions {
   /** The noise-like cipher PNG produced by `image-encrypt`. */
   cipherFile: File
-  passphrase: string
 }
 
 export interface WatermarkEmbedRequest extends BaseOptions {
@@ -89,17 +96,15 @@ export interface SpectrumRequest extends BaseOptions {
   gamma: number
 }
 
-export interface AudioEncryptRequest extends BaseOptions {
+export interface AudioEncryptRequest extends BaseOptions, KeyOptions {
   input: File
-  passphrase: string
   /** Samples per DRPE block; a power of two. */
   blockSize: number
 }
 
-export interface AudioDecryptRequest extends BaseOptions {
+export interface AudioDecryptRequest extends BaseOptions, KeyOptions {
   /** The noise-like cipher WAV produced by `audio-encrypt`. */
   container: File
-  passphrase: string
 }
 
 export interface DenoiseRequest extends BaseOptions {
@@ -122,16 +127,14 @@ export interface EnhanceRequest extends BaseOptions {
   gateFloor: number
 }
 
-export interface AudioAttackReportRequest extends BaseOptions {
+export interface AudioAttackReportRequest extends BaseOptions, KeyOptions {
   ciphertext: File
   original: File
-  passphrase: string
 }
 
-export interface ImageAttackReportRequest extends BaseOptions {
+export interface ImageAttackReportRequest extends BaseOptions, KeyOptions {
   cipherFile: File
   original: File
-  passphrase: string
 }
 
 export interface KpaDemoRequest extends BaseOptions {

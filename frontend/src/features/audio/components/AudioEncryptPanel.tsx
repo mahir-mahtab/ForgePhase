@@ -2,8 +2,8 @@ import { ArrowRight } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
+import { KeySelector } from '@/components/shared/KeySelector'
 import { OperationShell } from '@/components/shared/OperationShell'
-import { PassphraseField } from '@/components/shared/PassphraseField'
 import { ResultPanel } from '@/components/shared/ResultPanel'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -19,6 +19,7 @@ import { ACCEPT_AUDIO } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
 import { SAMPLES } from '@/lib/samples'
 import { AUDIO_DEFAULTS, BLOCK_SIZES, encryptAudio } from '@/services/audioService'
+import type { KeyMode } from '@/services/types'
 
 interface AudioEncryptPanelProps {
   onOpenInDecrypt: (container: File) => void
@@ -26,17 +27,25 @@ interface AudioEncryptPanelProps {
 
 export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
   const [file, setFile] = useState<File | null>(null)
+  const [keyMode, setKeyMode] = useState<KeyMode>('passphrase')
   const [passphrase, setPassphrase] = useState('')
+  const [keyFile, setKeyFile] = useState<File | null>(null)
   const [blockSize, setBlockSize] = useState<number>(AUDIO_DEFAULTS.blockSize)
   const { state, execute, reset } = useOperation(encryptAudio)
 
   const isRunning = state.phase === 'running'
-  const canRun = file !== null && passphrase.length > 0
+  const hasKey = keyMode === 'passphrase' ? passphrase.trim().length > 0 : keyFile !== null
+  const canRun = file !== null && hasKey
+  const blockedReason = !file
+    ? 'Choose an audio file.'
+    : keyMode === 'passphrase'
+      ? 'Enter a passphrase.'
+      : `Select a key ${keyMode} file.`
 
   const handleRun = useCallback(() => {
     if (!file) return
-    void execute({ input: file, passphrase, blockSize })
-  }, [blockSize, execute, file, passphrase])
+    void execute({ input: file, keyMode, passphrase, keyFile, blockSize })
+  }, [blockSize, execute, file, keyFile, keyMode, passphrase])
 
   return (
     <OperationShell
@@ -44,14 +53,17 @@ export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
       description="Cuts the waveform into fixed-size blocks and applies double random phase encoding to each, with a separate mask pair per block and channel."
       runLabel="Encrypt"
       canRun={canRun}
-      blockedReason="Choose an audio file and enter a passphrase."
+      blockedReason={blockedReason}
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
         'phaseforge', 'audio-encrypt',
-        file?.name ?? 'input.wav', 'cipher.wav', '--block-size', blockSize,
+        file?.name ?? 'input.wav', 'cipher.wav',
+        '--block-size', blockSize,
+        ...(keyMode === 'image' ? ['--key-image', keyFile?.name ?? 'key.png'] : []),
+        ...(keyMode === 'audio' ? ['--key-audio', keyFile?.name ?? 'key.wav'] : []),
       )}
       result={
         <ResultPanel
@@ -88,7 +100,15 @@ export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
         sample={SAMPLES.speechClean}
       />
 
-      <PassphraseField value={passphrase} onChange={setPassphrase} disabled={isRunning} />
+      <KeySelector
+        keyMode={keyMode}
+        onKeyModeChange={setKeyMode}
+        passphrase={passphrase}
+        onPassphraseChange={setPassphrase}
+        keyFile={keyFile}
+        onKeyFileChange={setKeyFile}
+        disabled={isRunning}
+      />
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="audio-block-size">Block size</Label>

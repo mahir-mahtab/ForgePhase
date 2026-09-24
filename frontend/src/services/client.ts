@@ -87,9 +87,13 @@ async function post(
 }
 
 /** Build multipart form data from plain fields. */
-export function form(fields: Record<string, string | Blob>): FormData {
+export function form(fields: Record<string, string | Blob | undefined | null>): FormData {
   const body = new FormData()
-  for (const [key, value] of Object.entries(fields)) body.set(key, value)
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined && value !== null) {
+      body.set(key, value)
+    }
+  }
   return body
 }
 

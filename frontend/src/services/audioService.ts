@@ -31,18 +31,30 @@ export const BLOCK_SIZES = [256, 1024, 2048, 4096, 8192, 16384] as const
 export function encryptAudio(
   request: AudioEncryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
+  const keyMode = request.keyMode ?? 'passphrase'
   return postArtifact(
     'audio-encrypt',
     'audio/encrypt',
     form({
       file: request.input,
-      passphrase: request.passphrase,
+      key_mode: keyMode,
+      passphrase: keyMode === 'passphrase' ? request.passphrase : undefined,
+      key_file: keyMode !== 'passphrase' ? request.keyFile : undefined,
       block_size: String(request.blockSize),
     }),
     'cipher.wav',
     [
       { label: 'Source', value: request.input.name },
       { label: 'Block size', value: `${request.blockSize} samples` },
+      {
+        label: 'Key',
+        value:
+          keyMode === 'passphrase'
+            ? 'Passphrase'
+            : keyMode === 'image'
+              ? `Image (${request.keyFile?.name ?? 'key.png'})`
+              : `Audio (${request.keyFile?.name ?? 'key.wav'})`,
+      },
     ],
     request.signal,
   )
@@ -52,16 +64,28 @@ export function encryptAudio(
 export function decryptAudio(
   request: AudioDecryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
+  const keyMode = request.keyMode ?? 'passphrase'
   return postArtifact(
     'audio-decrypt',
     'audio/decrypt',
     form({
       file: request.container,
-      passphrase: request.passphrase,
+      key_mode: keyMode,
+      passphrase: keyMode === 'passphrase' ? request.passphrase : undefined,
+      key_file: keyMode !== 'passphrase' ? request.keyFile : undefined,
     }),
     'restored.wav',
     [
       { label: 'Cipher', value: request.container.name },
+      {
+        label: 'Key',
+        value:
+          keyMode === 'passphrase'
+            ? 'Passphrase'
+            : keyMode === 'image'
+              ? `Image (${request.keyFile?.name ?? 'key.png'})`
+              : `Audio (${request.keyFile?.name ?? 'key.wav'})`,
+      },
     ],
     request.signal,
   )
@@ -117,13 +141,16 @@ export function enhanceAudio(
 export function audioRobustnessReport(
   request: AudioAttackReportRequest,
 ): Promise<ServiceResult<RobustnessReport>> {
+  const keyMode = request.keyMode ?? 'passphrase'
   return postJson(
     'attack-report',
     'analysis/attack-report',
     form({
       ciphertext: request.ciphertext,
       original: request.original,
-      passphrase: request.passphrase,
+      key_mode: keyMode,
+      passphrase: keyMode === 'passphrase' ? request.passphrase : undefined,
+      key_file: keyMode !== 'passphrase' ? request.keyFile : undefined,
     }),
     normalizeReport,
     request.signal,

@@ -28,12 +28,34 @@ def new_salt():
     return secrets.token_bytes(SALT_BYTES)
 
 
+def key_material_to_bytes(key):
+    """Normalize key material (str, bytes, or numpy array) to bytes for KDF.
+
+    When key is a numpy array (e.g. from an image or audio file), it is pre-hashed
+    using SHA-256 including its dtype and shape metadata. This bounds the input to
+    32 bytes so PBKDF2 does not re-hash large multi-megabyte arrays on every iteration,
+    and prevents collisions across different dtypes or layouts.
+    """
+    if isinstance(key, str):
+        return key.encode("utf-8")
+    if isinstance(key, (bytes, bytearray, memoryview)):
+        return bytes(key)
+    if isinstance(key, np.ndarray):
+        if not np.all(np.isfinite(key)):
+            raise ValueError("key array contains non-finite values (NaN or Inf)")
+        if key.size == 0:
+            raise ValueError("key array cannot be empty")
+        arr = np.ascontiguousarray(key)
+        header = f"numpy:{arr.dtype.str}:{arr.shape}:".encode("ascii")
+        return hashlib.sha256(header + arr.tobytes()).digest()
+    raise TypeError(f"key material must be str, bytes, or np.ndarray, got {type(key).__name__}")
+
+
 def derive_key(passphrase, salt, iterations=DEFAULT_ITERATIONS):
-    """Stretch a passphrase into a 32-byte master key (PBKDF2-HMAC-SHA256)."""
+    """Stretch a passphrase, bytes, or numpy array key into a 32-byte master key (PBKDF2-HMAC-SHA256)."""
     validate_iterations(iterations)
-    if isinstance(passphrase, str):
-        passphrase = passphrase.encode("utf-8")
-    return hashlib.pbkdf2_hmac("sha256", passphrase, salt, iterations, _KEY_BYTES)
+    key_bytes = key_material_to_bytes(passphrase)
+    return hashlib.pbkdf2_hmac("sha256", key_bytes, salt, iterations, _KEY_BYTES)
 
 
 def validate_iterations(iterations):

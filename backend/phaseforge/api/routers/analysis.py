@@ -20,16 +20,21 @@ class KpaRequest(BaseModel):
 
 
 @router.post("/attack-report")
-async def attack_report(original: UploadFile = File(...), passphrase: str = Form(...),
-                        ciphertext: UploadFile = File(...)):
+async def attack_report(original: UploadFile = File(...),
+                        ciphertext: UploadFile = File(...),
+                        passphrase: str | None = Form(None),
+                        key_file: UploadFile | None = File(None),
+                        key_mode: str = Form("passphrase")):
     """Damage a ciphertext in several ways and report what survives decryption.
 
     ``ciphertext`` is an image cipher PNG or an audio cipher WAV.
     """
     cipher_upload = await support.read_upload(ciphertext)
     payload = await support.read_upload(original)
+    key_payload = await support.read_upload(key_file) if (key_file is not None and key_file.filename) else None
 
     def work():
+        key = support.resolve_key_material(key_mode, passphrase, key_payload)
         if audio_cipher.is_cipher_wav(cipher_upload):
             cipher_data, metadata = support.decode_audio_cipher(cipher_upload)
             reference, _ = support.decode_audio(payload)
@@ -45,7 +50,7 @@ async def attack_report(original: UploadFile = File(...), passphrase: str = Form
             raise HTTPException(
                 400, "the original file does not match the ciphertext "
                      f"(expected shape {list(expected)}, got {list(reference.shape)})")
-        report = attacks.robustness_report(reference, cipher_data, passphrase, metadata)
+        report = attacks.robustness_report(reference, cipher_data, key, metadata)
         return {"kind": metadata.get("kind"), "report": support.json_safe(report)}
 
     return await support.run_job(work)

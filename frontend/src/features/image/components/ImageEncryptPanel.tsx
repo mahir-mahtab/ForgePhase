@@ -2,8 +2,8 @@ import { ArrowRight } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
+import { KeySelector } from '@/components/shared/KeySelector'
 import { OperationShell } from '@/components/shared/OperationShell'
-import { PassphraseField } from '@/components/shared/PassphraseField'
 import { ResultPanel } from '@/components/shared/ResultPanel'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -13,6 +13,7 @@ import { ACCEPT_IMAGE } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
 import { SAMPLES } from '@/lib/samples'
 import { encryptImage } from '@/services/imageService'
+import type { KeyMode } from '@/services/types'
 
 interface ImageEncryptPanelProps {
   onOpenInDecrypt: (cipher: File) => void
@@ -20,25 +21,33 @@ interface ImageEncryptPanelProps {
 
 export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
   const [file, setFile] = useState<File | null>(null)
+  const [keyMode, setKeyMode] = useState<KeyMode>('passphrase')
   const [passphrase, setPassphrase] = useState('')
+  const [keyFile, setKeyFile] = useState<File | null>(null)
   const [greyscale, setGreyscale] = useState(false)
   const { state, execute, reset } = useOperation(encryptImage)
 
   const isRunning = state.phase === 'running'
-  const canRun = file !== null && passphrase.length > 0
+  const hasKey = keyMode === 'passphrase' ? passphrase.trim().length > 0 : keyFile !== null
+  const canRun = file !== null && hasKey
+  const blockedReason = !file
+    ? 'Choose an image.'
+    : keyMode === 'passphrase'
+      ? 'Enter a passphrase.'
+      : `Select a key ${keyMode} file.`
 
   const handleRun = useCallback(() => {
     if (!file) return
-    void execute({ input: file, passphrase, greyscale })
-  }, [execute, file, greyscale, passphrase])
+    void execute({ input: file, keyMode, passphrase, keyFile, greyscale })
+  }, [execute, file, greyscale, keyFile, keyMode, passphrase])
 
   return (
     <OperationShell
       title="Encrypt an image"
-      description="Multiplies the image by a random phase mask, transforms it, and multiplies by a second mask in the frequency domain. Both masks come from your passphrase."
+      description="Multiplies the image by a random phase mask, transforms it, and multiplies by a second mask in the frequency domain. Both masks are derived from your key (passphrase, image, or audio)."
       runLabel="Encrypt"
       canRun={canRun}
-      blockedReason="Choose an image and enter a passphrase."
+      blockedReason={blockedReason}
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
@@ -46,6 +55,8 @@ export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
       command={cliCommand(
         'phaseforge', 'image-encrypt',
         file?.name ?? 'input.png', 'cipher.png',
+        ...(keyMode === 'image' ? ['--key-image', keyFile?.name ?? 'key.png'] : []),
+        ...(keyMode === 'audio' ? ['--key-audio', keyFile?.name ?? 'key.wav'] : []),
         greyscale && '--greyscale',
       )}
       result={
@@ -81,7 +92,15 @@ export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
         sample={SAMPLES.image}
       />
 
-      <PassphraseField value={passphrase} onChange={setPassphrase} disabled={isRunning} />
+      <KeySelector
+        keyMode={keyMode}
+        onKeyModeChange={setKeyMode}
+        passphrase={passphrase}
+        onPassphraseChange={setPassphrase}
+        keyFile={keyFile}
+        onKeyFileChange={setKeyFile}
+        disabled={isRunning}
+      />
 
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">

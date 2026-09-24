@@ -146,3 +146,34 @@ def test_attack_report_on_audio(tmp_path, audio_file, capsys):
 def test_kpa_demo(capsys):
     run("kpa-demo", "--size", 32)
     assert "Chosen-plaintext attack" in capsys.readouterr().out
+
+
+def test_cli_image_encrypt_decrypt_with_key_image(tmp_path, image_file):
+    key_file = tmp_path / "key.png"
+    image_io.save_image(key_file, np.random.default_rng(1).random((1, 16, 16)))
+    cipher = tmp_path / "cipher.png"
+    restored = tmp_path / "restored.png"
+
+    run("image-encrypt", image_file, cipher, "--key-image", key_file)
+    run("image-decrypt", cipher, restored, "--key-image", key_file)
+
+    original, _ = image_io.load_image(image_file)
+    recovered, _ = image_io.load_image(restored)
+    assert metrics.psnr(original, recovered) > 40
+
+
+def test_cli_audio_encrypt_decrypt_with_key_audio(tmp_path, audio_file):
+    key_file = tmp_path / "key.wav"
+    t = np.linspace(0, 0.2, 3200, endpoint=False)
+    audio_io.save_audio(key_file, (0.5 * np.sin(2 * np.pi * 440 * t))[None, :], 16000)
+    cipher = tmp_path / "cipher.wav"
+    restored = tmp_path / "restored.wav"
+
+    run("audio-encrypt", audio_file, cipher, "--key-audio", key_file)
+    run("audio-decrypt", cipher, restored, "--key-audio", key_file)
+
+    original, sr1 = audio_io.load_audio(audio_file)
+    recovered, sr2 = audio_io.load_audio(restored)
+    assert recovered.shape == original.shape
+    assert metrics.snr(original, recovered) > 30
+

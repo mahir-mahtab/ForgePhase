@@ -97,6 +97,27 @@ def decode_audio(data):
     return signal, sample_rate
 
 
+def resolve_key_material(key_mode: str, passphrase: str | None, key_payload: bytes | None):
+    """Resolve key material to a string (passphrase) or NumPy array (image/audio)."""
+    if key_mode == "passphrase":
+        if not passphrase:
+            raise HTTPException(422, "a passphrase is required")
+        return passphrase
+    elif key_mode == "image":
+        if not key_payload:
+            raise HTTPException(422, "an image key file is required")
+        key_array, _ = decode_image(key_payload)
+        return key_array
+    elif key_mode == "audio":
+        if not key_payload:
+            raise HTTPException(422, "an audio key file is required")
+        key_array, _ = decode_audio(key_payload)
+        return key_array
+    else:
+        raise HTTPException(400, f"unsupported key mode: {key_mode!r}")
+
+
+
 def image_response(array, filename, mode=None):
     buffer = io.BytesIO()
     image_io.save_image(buffer, array, mode=mode, format="PNG")

@@ -14,14 +14,19 @@ router = APIRouter(prefix="/api/image", tags=["image"])
 
 
 @router.post("/encrypt")
-async def encrypt(file: UploadFile = File(...), passphrase: str = Form(...),
+async def encrypt(file: UploadFile = File(...),
+                  passphrase: str | None = Form(None),
+                  key_file: UploadFile | None = File(None),
+                  key_mode: str = Form("passphrase"),
                   greyscale: bool = Form(False)):
     """Encrypt an image, returning a single PNG that looks like pure noise."""
     payload = await support.read_upload(file)
+    key_payload = await support.read_upload(key_file) if (key_file is not None and key_file.filename) else None
 
     def work():
+        key = support.resolve_key_material(key_mode, passphrase, key_payload)
         image, mode = support.decode_image(payload, greyscale)
-        ciphertext, metadata = drpe.encrypt(image, passphrase)
+        ciphertext, metadata = drpe.encrypt(image, key)
         metadata["mode"] = mode
         return support.file_response(
             image_cipher.encode(ciphertext, metadata), "image/png", "cipher.png")
@@ -30,17 +35,22 @@ async def encrypt(file: UploadFile = File(...), passphrase: str = Form(...),
 
 
 @router.post("/decrypt")
-async def decrypt(file: UploadFile = File(...), passphrase: str = Form(...)):
+async def decrypt(file: UploadFile = File(...),
+                  passphrase: str | None = Form(None),
+                  key_file: UploadFile | None = File(None),
+                  key_mode: str = Form("passphrase")):
     """Decrypt a cipher PNG back to the original image.
 
     A wrong passphrase does not error -- DRPE has no integrity check, so it
     simply produces noise. Telling the two apart is the caller's job.
     """
     payload = await support.read_upload(file)
+    key_payload = await support.read_upload(key_file) if (key_file is not None and key_file.filename) else None
 
     def work():
+        key = support.resolve_key_material(key_mode, passphrase, key_payload)
         ciphertext, metadata = support.decode_image_cipher(payload)
-        image = drpe.decrypt(ciphertext, passphrase, metadata)
+        image = drpe.decrypt(ciphertext, key, metadata)
         return support.image_response(image, "restored.png", metadata.get("mode"))
 
     return await support.run_job(work)

@@ -10,17 +10,22 @@ router = APIRouter(prefix="/api/audio", tags=["audio"])
 
 
 @router.post("/encrypt")
-async def encrypt(file: UploadFile = File(...), passphrase: str = Form(...),
+async def encrypt(file: UploadFile = File(...),
+                  passphrase: str | None = Form(None),
+                  key_file: UploadFile | None = File(None),
+                  key_mode: str = Form("passphrase"),
                   block_size: int = Form(drpe.DEFAULT_BLOCK_SIZE)):
     """Encrypt audio block by block, returning a single WAV that sounds like noise."""
     # Checked before the upload is decoded, so an absurd block size never
     # reaches an allocation.
     drpe.validate_block_size(block_size)
     payload = await support.read_upload(file)
+    key_payload = await support.read_upload(key_file) if (key_file is not None and key_file.filename) else None
 
     def work():
+        key = support.resolve_key_material(key_mode, passphrase, key_payload)
         signal, sample_rate = support.decode_audio(payload)
-        ciphertext, metadata = drpe.encrypt(signal, passphrase, sample_rate,
+        ciphertext, metadata = drpe.encrypt(signal, key, sample_rate,
                                             block_size=block_size)
         return support.file_response(
             audio_cipher.encode(ciphertext, metadata), "audio/wav", "cipher.wav")
@@ -29,16 +34,21 @@ async def encrypt(file: UploadFile = File(...), passphrase: str = Form(...),
 
 
 @router.post("/decrypt")
-async def decrypt(file: UploadFile = File(...), passphrase: str = Form(...)):
+async def decrypt(file: UploadFile = File(...),
+                  passphrase: str | None = Form(None),
+                  key_file: UploadFile | None = File(None),
+                  key_mode: str = Form("passphrase")):
     """Decrypt a cipher WAV back to the original recording.
 
     As with images, a wrong passphrase yields noise rather than an error.
     """
     payload = await support.read_upload(file)
+    key_payload = await support.read_upload(key_file) if (key_file is not None and key_file.filename) else None
 
     def work():
+        key = support.resolve_key_material(key_mode, passphrase, key_payload)
         ciphertext, metadata = support.decode_audio_cipher(payload)
-        signal = drpe.decrypt(ciphertext, passphrase, metadata)
+        signal = drpe.decrypt(ciphertext, key, metadata)
         return support.audio_response(signal, metadata["sample_rate"], "restored.wav")
 
     return await support.run_job(work)

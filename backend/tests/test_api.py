@@ -351,3 +351,47 @@ def test_cors_headers_present(client, image):
                            headers={"Origin": "http://localhost:5173"})
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
     assert "Content-Disposition" in response.headers["access-control-expose-headers"]
+
+
+def test_image_encrypt_and_decrypt_with_image_key(client, image):
+    key_img = np.random.default_rng(77).random((1, 16, 16))
+    key_bytes = png_bytes(key_img)
+
+    enc_res = client.post("/api/image/encrypt",
+                          files={"file": ("in.png", png_bytes(image), "image/png"),
+                                 "key_file": ("key.png", key_bytes, "image/png")},
+                          data={"key_mode": "image"})
+    assert enc_res.status_code == 200
+
+    dec_res = client.post("/api/image/decrypt",
+                          files={"file": ("cipher.png", enc_res.content, "image/png"),
+                                 "key_file": ("key.png", key_bytes, "image/png")},
+                          data={"key_mode": "image"})
+    assert dec_res.status_code == 200
+    recovered, _ = image_io.load_image(io.BytesIO(dec_res.content))
+    assert np.allclose(recovered, image, atol=1e-2)
+
+
+def test_audio_encrypt_and_decrypt_with_image_key(client, signal):
+    key_img = np.random.default_rng(88).random((1, 16, 16))
+    key_bytes = png_bytes(key_img)
+
+    enc_res = client.post("/api/audio/encrypt",
+                          files={"file": ("in.wav", wav_bytes(signal), "audio/wav"),
+                                 "key_file": ("key.png", key_bytes, "image/png")},
+                          data={"key_mode": "image"})
+    assert enc_res.status_code == 200
+
+    dec_res = client.post("/api/audio/decrypt",
+                          files={"file": ("cipher.wav", enc_res.content, "audio/wav"),
+                                 "key_file": ("key.png", key_bytes, "image/png")},
+                          data={"key_mode": "image"})
+    assert dec_res.status_code == 200
+
+
+def test_missing_key_file_gives_422(client, image):
+    res = client.post("/api/image/encrypt",
+                      files={"file": ("in.png", png_bytes(image), "image/png")},
+                      data={"key_mode": "image"})
+    assert res.status_code == 422
+

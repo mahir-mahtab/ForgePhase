@@ -22,7 +22,13 @@ from .io import audio_cipher, audio_io, image_cipher, image_io
 
 
 def _passphrase(args):
-    """Prefer an interactive prompt: a passphrase in argv lands in shell history."""
+    """Retrieve key material: from --key-image, --key-audio, --passphrase, or interactive prompt."""
+    if getattr(args, "key_image", None):
+        img, _ = image_io.load_image(args.key_image)
+        return img
+    if getattr(args, "key_audio", None):
+        sig, _ = audio_io.load_audio(args.key_audio)
+        return sig
     return args.passphrase or getpass.getpass("Passphrase: ")
 
 
@@ -183,7 +189,9 @@ def build_parser():
         return sub
 
     def add_passphrase(sub):
-        sub.add_argument("--passphrase", help="prompted for securely if omitted")
+        sub.add_argument("--passphrase", help="prompted for securely if omitted (unless a key file is given)")
+        sub.add_argument("--key-image", help="lossless image file whose array data acts as the key")
+        sub.add_argument("--key-audio", help="lossless audio file whose array data acts as the key")
         return sub
 
     sub = add("image-encrypt", cmd_image_encrypt, "encrypt an image with DRPE")

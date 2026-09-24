@@ -31,18 +31,30 @@ export const IMAGE_DEFAULTS = {
 export function encryptImage(
   request: ImageEncryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
+  const keyMode = request.keyMode ?? 'passphrase'
   return postArtifact(
     'image-encrypt',
     'image/encrypt',
     form({
       file: request.input,
-      passphrase: request.passphrase,
+      key_mode: keyMode,
+      passphrase: keyMode === 'passphrase' ? request.passphrase : undefined,
+      key_file: keyMode !== 'passphrase' ? request.keyFile : undefined,
       greyscale: String(request.greyscale),
     }),
     'cipher.png',
     [
       { label: 'Source', value: request.input.name },
       { label: 'Colour', value: request.greyscale ? 'Greyscale' : 'Original' },
+      {
+        label: 'Key',
+        value:
+          keyMode === 'passphrase'
+            ? 'Passphrase'
+            : keyMode === 'image'
+              ? `Image (${request.keyFile?.name ?? 'key.png'})`
+              : `Audio (${request.keyFile?.name ?? 'key.wav'})`,
+      },
     ],
     request.signal,
   )
@@ -52,16 +64,28 @@ export function encryptImage(
 export function decryptImage(
   request: ImageDecryptRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
+  const keyMode = request.keyMode ?? 'passphrase'
   return postArtifact(
     'image-decrypt',
     'image/decrypt',
     form({
       file: request.cipherFile,
-      passphrase: request.passphrase,
+      key_mode: keyMode,
+      passphrase: keyMode === 'passphrase' ? request.passphrase : undefined,
+      key_file: keyMode !== 'passphrase' ? request.keyFile : undefined,
     }),
     'restored.png',
     [
       { label: 'Cipher', value: request.cipherFile.name },
+      {
+        label: 'Key',
+        value:
+          keyMode === 'passphrase'
+            ? 'Passphrase'
+            : keyMode === 'image'
+              ? `Image (${request.keyFile?.name ?? 'key.png'})`
+              : `Audio (${request.keyFile?.name ?? 'key.wav'})`,
+      },
     ],
     request.signal,
   )
@@ -174,13 +198,16 @@ export function renderSpectrum(
 export function imageRobustnessReport(
   request: ImageAttackReportRequest,
 ): Promise<ServiceResult<RobustnessReport>> {
+  const keyMode = request.keyMode ?? 'passphrase'
   return postJson(
     'attack-report',
     'analysis/attack-report',
     form({
       ciphertext: request.cipherFile,
       original: request.original,
-      passphrase: request.passphrase,
+      key_mode: keyMode,
+      passphrase: keyMode === 'passphrase' ? request.passphrase : undefined,
+      key_file: keyMode !== 'passphrase' ? request.keyFile : undefined,
     }),
     normalizeReport,
     request.signal,
