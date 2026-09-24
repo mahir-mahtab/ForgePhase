@@ -20,7 +20,7 @@ import { cliCommand } from '@/lib/cli'
 import type { MaskParams } from '@/lib/mask'
 import { SAMPLES } from '@/lib/samples'
 import { IMAGE_DEFAULTS, applyFilter } from '@/services/imageService'
-import type { FilterKind, FilterShape, TransformBackend } from '@/services/types'
+import type { FilterKind, FilterShape } from '@/services/types'
 
 const KINDS: ReadonlyArray<{ value: FilterKind; label: string }> = [
   { value: 'low', label: 'Low-pass' },
@@ -40,7 +40,7 @@ const SHAPES: ReadonlyArray<{ value: FilterShape; label: string; note: string }>
   { value: 'ideal', label: 'Ideal', note: 'Hard cut; causes visible ringing.' },
 ]
 
-export function FilterPanel({ backend }: { backend: TransformBackend }) {
+export function FilterPanel() {
   const [input, setInput] = useState<File | null>(null)
   const [kind, setKind] = useState<FilterKind>('low')
   const [cutoff, setCutoff] = useState<number>(IMAGE_DEFAULTS.filterCutoff)
@@ -63,9 +63,8 @@ export function FilterPanel({ backend }: { backend: TransformBackend }) {
       highCutoff: isBand ? highCutoff : null,
       filterShape,
       order,
-      backend,
     })
-  }, [backend, bandValid, cutoff, execute, filterShape, highCutoff, input, isBand, kind, order])
+  }, [bandValid, cutoff, execute, filterShape, highCutoff, input, isBand, kind, order])
 
   const maskParams = useMemo<MaskParams>(
     () => ({ kind, cutoff, highCutoff: isBand ? highCutoff : null, shape: filterShape, order }),
@@ -84,7 +83,7 @@ export function FilterPanel({ backend }: { backend: TransformBackend }) {
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'filter', input?.name ?? 'input.png', 'filtered.png',
+        'phaseforge', 'filter', input?.name ?? 'input.png', 'filtered.png',
         '--kind', kind, '--cutoff', cutoff, isBand && '--high-cutoff', isBand && highCutoff,
         '--filter-shape', filterShape, filterShape === 'butterworth' && '--order',
         filterShape === 'butterworth' && order,

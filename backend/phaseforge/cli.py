@@ -16,7 +16,6 @@ from .analysis import attacks, metrics
 from .audio import denoise as audio_denoise
 from .audio import drpe as audio_drpe
 from .audio import enhance as audio_enhance
-from .core import transform
 from .image import drpe as image_drpe
 from .image import freq_edit, watermark
 from .io import audio_cipher, audio_io, image_cipher, image_io
@@ -176,9 +175,6 @@ def cmd_kpa_demo(args):
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="phaseforge", description="Fourier-domain image and audio security toolkit")
-    parser.add_argument("--backend", choices=transform.available_backends(),
-                        default=transform.get_backend(),
-                        help="DFT implementation to use")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     def add(name, handler, help_text):
@@ -271,7 +267,6 @@ def build_parser():
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
-    transform.set_backend(args.backend)
     try:
         args.handler(args)
     except (ValueError, OSError) as error:

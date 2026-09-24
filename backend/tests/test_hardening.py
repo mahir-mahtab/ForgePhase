@@ -20,8 +20,6 @@ from phaseforge.analysis import metrics
 from phaseforge.api import support
 from phaseforge.api.app import create_app
 from phaseforge.audio import denoise, drpe as audio_drpe, enhance
-from phaseforge.core import transform
-from phaseforge.core.backends import custom_backend
 from phaseforge.image import drpe as image_drpe
 from phaseforge.image import freq_edit, watermark
 from phaseforge.io import audio_cipher, audio_io, image_io
@@ -55,67 +53,20 @@ def tone():
     return (0.4 * np.sin(2 * np.pi * 220 * t))[None, :]
 
 
-# -- Finding 9: the custom backend handles every length ----------------------
+# -- Finding 9: modules handle arbitrary lengths ----------------------------
 
-@pytest.mark.parametrize("length", [1, 3, 5, 12, 63, 65, 100, 257])
-def test_custom_fft_matches_numpy_at_any_length(length):
-    rng = np.random.default_rng(length)
-    x = rng.normal(size=(2, length)) + 1j * rng.normal(size=(2, length))
-    assert np.allclose(custom_backend.fft(x), np.fft.fft(x))
-    assert np.allclose(custom_backend.ifft(x), np.fft.ifft(x))
-
-
-def test_modules_run_on_odd_carriers_under_custom_backend():
+def test_modules_run_on_odd_carriers():
     rng = np.random.default_rng(0)
     image = rng.random((1, 63, 65)) * 0.5
     mark = rng.random((8, 8))
-    with transform.using_backend("custom"):
-        low = freq_edit.apply_filter(image, "low", cutoff=0.3, filter_shape="ideal")
-        high = freq_edit.apply_filter(image, "high", cutoff=0.3, filter_shape="ideal")
-        preview = freq_edit.spectrum_preview(image)
-        marked = watermark.embed(image, mark, 0.2)
-        recovered = watermark.extract(image, marked, mark.shape, 0.2)
+    low = freq_edit.apply_filter(image, "low", cutoff=0.3, filter_shape="ideal")
+    high = freq_edit.apply_filter(image, "high", cutoff=0.3, filter_shape="ideal")
+    preview = freq_edit.spectrum_preview(image)
+    marked = watermark.embed(image, mark, 0.2)
+    recovered = watermark.extract(image, marked, mark.shape, 0.2)
     assert np.allclose(low + high, image)
     assert preview.shape == image.shape
     assert np.max(np.abs(recovered - mark)) < 1e-8
-
-
-# -- Backend selection is per request -----------------------------------------
-
-def test_backend_selection_is_isolated_between_threads():
-    seen = {}
-    ready = threading.Event()
-    release = threading.Event()
-
-    def worker():
-        with transform.using_backend("custom"):
-            ready.set()
-            release.wait(5)
-            seen["worker"] = transform.get_backend()
-
-    thread = threading.Thread(target=worker)
-    thread.start()
-    ready.wait(5)
-    seen["main"] = transform.get_backend()
-    release.set()
-    thread.join(5)
-    assert seen == {"worker": "custom", "main": "numpy"}
-
-
-def test_unknown_backend_is_a_client_error(client, tone):
-    response = client.post("/api/audio/denoise",
-                           files={"file": ("in.wav", wav_bytes(tone))},
-                           data={"backend": "nope"})
-    assert response.status_code == 400
-    assert "unknown backend" in response.json()["detail"]
-
-
-def test_processing_routes_accept_custom_backend(client):
-    image = np.random.default_rng(1).random((3, 33, 47))
-    response = client.post("/api/image/filter",
-                           files={"file": ("in.png", png_bytes(image))},
-                           data={"backend": "custom", "cutoff": "0.4"})
-    assert response.status_code == 200
 
 
 # -- Finding 3: work runs off the event loop ----------------------------------
@@ -124,13 +75,10 @@ def test_run_job_executes_in_a_worker_thread():
     async def main():
         loop_thread = threading.get_ident()
         job_thread = await support.run_job(threading.get_ident)
-        backend = await support.run_job(transform.get_backend, backend="custom")
-        return loop_thread, job_thread, backend
+        return loop_thread, job_thread
 
-    loop_thread, job_thread, backend = anyio.run(main)
+    loop_thread, job_thread = anyio.run(main)
     assert loop_thread != job_thread
-    assert backend == "custom"
-    assert transform.get_backend() == "numpy"
 
 
 # -- Findings 4 and 5: watermark geometry -------------------------------------
@@ -384,7 +332,7 @@ def test_attack_report_accepts_colour_original_for_greyscale_cipher(client):
 
 
 def test_kpa_demo_returns_viewable_images(client):
-    body = client.post("/api/analysis/kpa-demo", json={"size": 32, "backend": "custom"}).json()
+    body = client.post("/api/analysis/kpa-demo", json={"size": 32}).json()
     assert body["correlation"] > 0.999
     for key in ("secret", "ciphertext", "recovered"):
         assert body["images"][key].startswith("data:image/png;base64,")

@@ -8,16 +8,13 @@ import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_PNG } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
 import { decryptImage } from '@/services/imageService'
-import type { TransformBackend } from '@/services/types'
 
 interface ImageDecryptPanelProps {
-  backend: TransformBackend
   cipherFile: File | null
   onCipherChange: (file: File | null) => void
 }
 
 export function ImageDecryptPanel({
-  backend,
   cipherFile,
   onCipherChange,
 }: ImageDecryptPanelProps) {
@@ -29,8 +26,8 @@ export function ImageDecryptPanel({
 
   const handleRun = useCallback(() => {
     if (!cipherFile) return
-    void execute({ cipherFile, passphrase, backend })
-  }, [backend, cipherFile, execute, passphrase])
+    void execute({ cipherFile, passphrase })
+  }, [cipherFile, execute, passphrase])
 
   return (
     <OperationShell
@@ -44,7 +41,7 @@ export function ImageDecryptPanel({
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'image-decrypt',
+        'phaseforge', 'image-decrypt',
         cipherFile?.name ?? 'cipher.png', 'restored.png',
       )}
       result={

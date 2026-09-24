@@ -15,7 +15,6 @@ import { cliCommand } from '@/lib/cli'
 import { SAMPLES } from '@/lib/samples'
 import { positionRange } from '@/lib/watermark'
 import { IMAGE_DEFAULTS, embedWatermark, extractWatermark } from '@/services/imageService'
-import type { TransformBackend } from '@/services/types'
 
 const STRENGTH_HELP = 'Higher survives more damage but is easier to see.'
 const POSITION_HELP = 'How far above the centre of the spectrum the mark sits, as a fraction of the image height.'
@@ -70,10 +69,8 @@ function RangeHint({
 }
 
 function EmbedPanel({
-  backend,
   onSendToExtract,
 }: {
-  backend: TransformBackend
   onSendToExtract: (inputs: ExtractInputs) => void
 }) {
   const [input, setInput] = useState<File | null>(null)
@@ -94,8 +91,8 @@ function EmbedPanel({
 
   const handleRun = useCallback(() => {
     if (!input || !watermark) return
-    void execute({ input, watermark, strength, position, backend })
-  }, [backend, execute, input, position, strength, watermark])
+    void execute({ input, watermark, strength, position })
+  }, [execute, input, position, strength, watermark])
 
   return (
     <OperationShell
@@ -113,7 +110,7 @@ function EmbedPanel({
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'watermark-embed',
+        'phaseforge', 'watermark-embed',
         input?.name ?? 'input.png', watermark?.name ?? 'mark.png', 'watermarked.png',
         '--strength', strength, '--position', position,
       )}
@@ -192,10 +189,8 @@ function EmbedPanel({
 }
 
 function ExtractPanel({
-  backend,
   inputs,
 }: {
-  backend: TransformBackend
   inputs: {
     original: File | null
     setOriginal: (file: File | null) => void
@@ -236,9 +231,8 @@ function ExtractPanel({
       width: parsedWidth,
       strength,
       position,
-      backend,
     })
-  }, [backend, execute, marked, original, parsedHeight, parsedWidth, position, sizeValid, strength])
+  }, [execute, marked, original, parsedHeight, parsedWidth, position, sizeValid, strength])
 
   return (
     <OperationShell
@@ -258,7 +252,7 @@ function ExtractPanel({
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'watermark-extract',
+        'phaseforge', 'watermark-extract',
         original?.name ?? 'original.png', marked?.name ?? 'watermarked.png', 'extracted.png',
         '--height', sizeValid ? parsedHeight : '?', '--width', sizeValid ? parsedWidth : '?',
         '--strength', strength, '--position', position,
@@ -345,7 +339,7 @@ function ExtractPanel({
   )
 }
 
-export function WatermarkPanel({ backend }: { backend: TransformBackend }) {
+export function WatermarkPanel() {
   // Extract inputs live here so a finished embed can fill them in.
   const [original, setOriginal] = useState<File | null>(null)
   const [marked, setMarked] = useState<File | null>(null)
@@ -366,10 +360,9 @@ export function WatermarkPanel({ backend }: { backend: TransformBackend }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <EmbedPanel backend={backend} onSendToExtract={sendToExtract} />
+      <EmbedPanel onSendToExtract={sendToExtract} />
       <div id="watermark-extract" className="scroll-mt-20">
         <ExtractPanel
-          backend={backend}
           inputs={{
             original, setOriginal, marked, setMarked, height, setHeight,
             width, setWidth, strength, setStrength, position, setPosition,

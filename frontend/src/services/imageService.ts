@@ -38,13 +38,11 @@ export function encryptImage(
       file: request.input,
       passphrase: request.passphrase,
       greyscale: String(request.greyscale),
-      backend: request.backend,
     }),
     'cipher.png',
     [
       { label: 'Source', value: request.input.name },
       { label: 'Colour', value: request.greyscale ? 'Greyscale' : 'Original' },
-      { label: 'FFT backend', value: request.backend },
     ],
     request.signal,
   )
@@ -60,12 +58,10 @@ export function decryptImage(
     form({
       file: request.cipherFile,
       passphrase: request.passphrase,
-      backend: request.backend,
     }),
     'restored.png',
     [
       { label: 'Cipher', value: request.cipherFile.name },
-      { label: 'FFT backend', value: request.backend },
     ],
     request.signal,
   )
@@ -83,7 +79,6 @@ export function embedWatermark(
       watermark_file: request.watermark,
       strength: String(request.strength),
       position: String(request.position),
-      backend: request.backend,
     }),
     'watermarked.png',
     [
@@ -110,7 +105,6 @@ export function extractWatermark(
       width: String(request.width),
       strength: String(request.strength),
       position: String(request.position),
-      backend: request.backend,
     }),
     'watermark.png',
     [
@@ -132,7 +126,6 @@ export function applyFilter(
     cutoff: String(request.cutoff),
     filter_shape: request.filterShape,
     order: String(request.order),
-    backend: request.backend,
   }
   if (request.kind === 'band' && request.highCutoff !== null) {
     fields.high_cutoff = String(request.highCutoff)
@@ -167,7 +160,6 @@ export function renderSpectrum(
     form({
       file: request.input,
       gamma: String(request.gamma),
-      backend: request.backend,
     }),
     'spectrum.png',
     [
@@ -189,7 +181,6 @@ export function imageRobustnessReport(
       ciphertext: request.cipherFile,
       original: request.original,
       passphrase: request.passphrase,
-      backend: request.backend,
     }),
     normalizeReport,
     request.signal,
@@ -203,7 +194,7 @@ export function runKpaDemo(
   return postJson(
     'kpa-demo',
     'analysis/kpa-demo',
-    { size: request.size, backend: request.backend },
+    { size: request.size },
     (raw) => {
       const body = raw as {
         size: number

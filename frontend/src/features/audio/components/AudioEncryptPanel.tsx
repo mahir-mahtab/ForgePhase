@@ -19,14 +19,12 @@ import { ACCEPT_AUDIO } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
 import { SAMPLES } from '@/lib/samples'
 import { AUDIO_DEFAULTS, BLOCK_SIZES, encryptAudio } from '@/services/audioService'
-import type { TransformBackend } from '@/services/types'
 
 interface AudioEncryptPanelProps {
-  backend: TransformBackend
   onOpenInDecrypt: (container: File) => void
 }
 
-export function AudioEncryptPanel({ backend, onOpenInDecrypt }: AudioEncryptPanelProps) {
+export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
   const [file, setFile] = useState<File | null>(null)
   const [passphrase, setPassphrase] = useState('')
   const [blockSize, setBlockSize] = useState<number>(AUDIO_DEFAULTS.blockSize)
@@ -37,8 +35,8 @@ export function AudioEncryptPanel({ backend, onOpenInDecrypt }: AudioEncryptPane
 
   const handleRun = useCallback(() => {
     if (!file) return
-    void execute({ input: file, passphrase, blockSize, backend })
-  }, [backend, blockSize, execute, file, passphrase])
+    void execute({ input: file, passphrase, blockSize })
+  }, [blockSize, execute, file, passphrase])
 
   return (
     <OperationShell
@@ -52,7 +50,7 @@ export function AudioEncryptPanel({ backend, onOpenInDecrypt }: AudioEncryptPane
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'audio-encrypt',
+        'phaseforge', 'audio-encrypt',
         file?.name ?? 'input.wav', 'cipher.wav', '--block-size', blockSize,
       )}
       result={

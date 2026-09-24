@@ -22,26 +22,25 @@ def _source():
     return np.stack([x, y, np.full_like(x, 0.5)])
 
 
-def _encrypt(client, image, backend="numpy"):
+def _encrypt(client, image):
     response = client.post(
         "/api/image/encrypt",
         files={"file": ("source.png", _png(image), "image/png")},
-        data={"passphrase": "cipher test", "backend": backend},
+        data={"passphrase": "cipher test"},
     )
     assert response.status_code == 200
     assert response.headers["content-type"] == "image/png"
     return response.content
 
 
-@pytest.mark.parametrize("backend", ["numpy", "custom"])
-def test_encrypt_returns_one_png_that_decrypts_with_the_passphrase(backend):
+def test_encrypt_returns_one_png_that_decrypts_with_the_passphrase():
     image = _source()
     with TestClient(create_app()) as client:
-        cipher = _encrypt(client, image, backend)
+        cipher = _encrypt(client, image)
         decrypted = client.post(
             "/api/image/decrypt",
             files={"file": ("cipher.png", cipher, "image/png")},
-            data={"passphrase": "cipher test", "backend": backend},
+            data={"passphrase": "cipher test"},
         )
     assert decrypted.status_code == 200
     assert metrics.psnr(image, image_io.load_image(io.BytesIO(decrypted.content))[0]) > 40

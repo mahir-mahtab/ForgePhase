@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..audio import drpe as audio_drpe
-from ..core import framing, transform
+from ..core import framing
 from ..image import freq_edit
 from ..keys import derive
 from . import support
@@ -65,10 +65,6 @@ def create_app():
         """Defaults and limits, so the frontend need not hardcode them."""
         return {
             "version": __version__,
-            "transform": {
-                "backend": transform.get_backend(),
-                "available": list(transform.available_backends()),
-            },
             "limits": {
                 "max_upload_bytes": support.MAX_UPLOAD_BYTES,
                 "max_image_pixels": support.MAX_IMAGE_PIXELS,

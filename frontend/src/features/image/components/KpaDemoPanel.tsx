@@ -8,7 +8,7 @@ import { useOperation } from '@/hooks/useOperation'
 import { cliCommand } from '@/lib/cli'
 import { formatMetric } from '@/lib/format'
 import { runKpaDemo } from '@/services/imageService'
-import type { KpaDemoResult, TransformBackend } from '@/services/types'
+import type { KpaDemoResult } from '@/services/types'
 
 const SIZES = [
   { value: '32', label: '32 px' },
@@ -56,14 +56,14 @@ function KpaResult({ result }: { result: KpaDemoResult }) {
   )
 }
 
-export function KpaDemoPanel({ backend }: { backend: TransformBackend }) {
+export function KpaDemoPanel() {
   const [size, setSize] = useState<Size>('64')
   const { state, execute, reset } = useOperation(runKpaDemo)
   const isRunning = state.phase === 'running'
 
   const handleRun = useCallback(() => {
-    void execute({ size: Number(size), backend })
-  }, [backend, execute, size])
+    void execute({ size: Number(size) })
+  }, [execute, size])
 
   return (
     <OperationShell
@@ -75,7 +75,7 @@ export function KpaDemoPanel({ backend }: { backend: TransformBackend }) {
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
-      command={cliCommand('phaseforge', '--backend', backend, 'kpa-demo', '--size', size)}
+      command={cliCommand('phaseforge', 'kpa-demo', '--size', size)}
       result={
         <ReportState
           state={state}

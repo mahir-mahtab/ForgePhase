@@ -9,9 +9,8 @@ import { ACCEPT_IMAGE } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
 import { SAMPLES } from '@/lib/samples'
 import { IMAGE_DEFAULTS, renderSpectrum } from '@/services/imageService'
-import type { TransformBackend } from '@/services/types'
 
-export function SpectrumPanel({ backend }: { backend: TransformBackend }) {
+export function SpectrumPanel() {
   const [image, setImage] = useState<File | null>(null)
   const [gamma, setGamma] = useState<number>(IMAGE_DEFAULTS.spectrumGamma)
   const { state, execute, reset } = useOperation(renderSpectrum)
@@ -20,8 +19,8 @@ export function SpectrumPanel({ backend }: { backend: TransformBackend }) {
   const canRun = image !== null
 
   const handleRun = useCallback(() => {
-    if (image) void execute({ input: image, gamma, backend })
-  }, [backend, execute, gamma, image])
+    if (image) void execute({ input: image, gamma })
+  }, [execute, gamma, image])
 
   return (
     <OperationShell
@@ -35,7 +34,7 @@ export function SpectrumPanel({ backend }: { backend: TransformBackend }) {
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'spectrum',
+        'phaseforge', 'spectrum',
         image?.name ?? 'input.png', 'spectrum.png',
         '--gamma', gamma,
       )}

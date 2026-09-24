@@ -62,8 +62,6 @@ def test_health(client):
 
 def test_info_reports_defaults_and_limits(client):
     body = client.get("/api/info").json()
-    assert body["transform"]["backend"] == "numpy"
-    assert "numpy" in body["transform"]["available"]
     assert body["limits"]["max_image_pixels"] > 0
     assert body["defaults"]["audio_block_size"] == 4096
     assert "gaussian" in body["defaults"]["filter_shapes"]

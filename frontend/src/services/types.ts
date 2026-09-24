@@ -8,9 +8,6 @@
 
 export type DomainKind = 'image' | 'audio'
 
-/** `phaseforge --backend {...}` -- the DFT implementation to run with. */
-export type TransformBackend = 'numpy' | 'custom'
-
 /** `phaseforge filter --kind {...}` */
 export type FilterKind = 'low' | 'high' | 'band'
 
@@ -34,7 +31,6 @@ export type OperationId =
 
 /** Options every operation accepts. */
 export interface BaseOptions {
-  backend: TransformBackend
   signal?: AbortSignal
 }
 
@@ -190,7 +186,6 @@ export interface KpaDemoResult {
 
 export interface BackendInfo {
   version: string
-  backends: string[]
   limits: {
     maxImagePixels: number
     maxAudioSamples: number

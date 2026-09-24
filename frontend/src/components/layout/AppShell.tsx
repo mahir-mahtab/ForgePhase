@@ -2,7 +2,6 @@ import { Menu, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { memo, useEffect, useState } from 'react'
 
-import { BackendSelect } from '@/components/layout/BackendSelect'
 import { BackendStatus } from '@/components/layout/BackendStatus'
 import { Logo } from '@/components/layout/Logo'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
@@ -10,22 +9,20 @@ import { Button } from '@/components/ui/button'
 import { useBackendStatus } from '@/hooks/useBackendStatus'
 import { SECTIONS } from '@/lib/navigation'
 import { cn } from '@/lib/utils'
-import type { DomainKind, TransformBackend } from '@/services/types'
+import type { DomainKind } from '@/services/types'
 
 interface AppShellProps {
   section: DomainKind
   /** The open tool in each section, so the sidebar can mark both. */
   tools: Readonly<Record<DomainKind, string>>
   onNavigate: (section: DomainKind, tool: string) => void
-  backend: TransformBackend
-  onBackendChange: (backend: TransformBackend) => void
   children: ReactNode
 }
 
 function Wordmark() {
   return (
     <div className="flex items-center gap-2.5">
-      <Logo className="size-8" />
+      <Logo className="size-9" />
       <span className="font-display text-2xl leading-none tracking-tight">PhaseForge</span>
     </div>
   )
@@ -35,8 +32,6 @@ function AppShellImpl({
   section,
   tools,
   onNavigate,
-  backend,
-  onBackendChange,
   children,
 }: AppShellProps) {
   const status = useBackendStatus()
@@ -116,7 +111,6 @@ function AppShellImpl({
           <BackendStatus status={status} />
           <ThemeToggle />
         </div>
-        <BackendSelect value={backend} onChange={onBackendChange} />
       </div>
     </div>
   )

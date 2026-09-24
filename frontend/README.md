@@ -40,11 +40,11 @@ elsewhere, set `VITE_API_BASE_URL` at build time.
 
 ```
 src/
-├── App.tsx                   Workspace switching, FFT backend choice
+├── App.tsx                   Workspace switching
 ├── index.css                 Design tokens (light and dark)
 ├── components/
 │   ├── ui/                   shadcn primitives (vendored source)
-│   ├── layout/               Top bar, API status, backend select, theme toggle
+│   ├── layout/               Top bar, API status, theme toggle
 │   └── shared/               Operation card, dropzone, result views, tables
 ├── features/
 │   ├── image/                Encrypt, decrypt, watermark, filter, spectrum, analysis

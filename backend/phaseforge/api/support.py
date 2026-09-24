@@ -20,7 +20,6 @@ from fastapi import HTTPException, UploadFile
 from fastapi.responses import Response
 from PIL import Image
 
-from ..core import transform
 from ..io import audio_cipher, audio_io, container, image_cipher, image_io
 
 MAX_UPLOAD_BYTES = None
@@ -45,28 +44,14 @@ def _job_limiter():
     return _limiter
 
 
-async def run_job(work, *args, backend=None):
+async def run_job(work, *args):
     """Run CPU-bound ``work(*args)`` in a worker thread.
 
     Decoding, PBKDF2, transforms and encoding all hold the CPU for a long
     time; running them on the event loop would stall every other request,
-    including health checks. ``backend`` selects the DFT implementation for
-    this call only -- the selection is a context variable, so concurrent
-    requests never see each other's choice.
+    including health checks.
     """
-    if backend is not None:
-        if backend not in transform.available_backends():
-            raise HTTPException(
-                400, f"unknown backend {backend!r}; available: "
-                     f"{', '.join(transform.available_backends())}")
-
-    def job():
-        if backend is None:
-            return work(*args)
-        with transform.using_backend(backend):
-            return work(*args)
-
-    return await anyio.to_thread.run_sync(job, limiter=_job_limiter())
+    return await anyio.to_thread.run_sync(work, *args, limiter=_job_limiter())
 
 
 async def read_upload(upload: UploadFile, limit=MAX_UPLOAD_BYTES):

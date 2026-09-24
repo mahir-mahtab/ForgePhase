@@ -17,13 +17,11 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 class KpaRequest(BaseModel):
     size: int = Field(default=64, ge=8, le=256,
                       description="side length of the probe image; a power of two")
-    backend: str = Field(default="numpy", description="DFT implementation to use")
 
 
 @router.post("/attack-report")
 async def attack_report(original: UploadFile = File(...), passphrase: str = Form(...),
-                        ciphertext: UploadFile = File(...),
-                        backend: str = Form("numpy")):
+                        ciphertext: UploadFile = File(...)):
     """Damage a ciphertext in several ways and report what survives decryption.
 
     ``ciphertext`` is an image cipher PNG or an audio cipher WAV.
@@ -50,7 +48,7 @@ async def attack_report(original: UploadFile = File(...), passphrase: str = Form
         report = attacks.robustness_report(reference, cipher_data, passphrase, metadata)
         return {"kind": metadata.get("kind"), "report": support.json_safe(report)}
 
-    return await support.run_job(work, backend=backend)
+    return await support.run_job(work)
 
 
 def _probe_image(size):
@@ -100,4 +98,4 @@ async def kpa_demo(request: KpaRequest):
             },
         }
 
-    return await support.run_job(work, backend=request.backend)
+    return await support.run_job(work)

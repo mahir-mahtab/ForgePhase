@@ -7,7 +7,6 @@ import { AudioRobustnessPanel } from '@/features/audio/components/AudioRobustnes
 import { DenoisePanel } from '@/features/audio/components/DenoisePanel'
 import { EnhancePanel } from '@/features/audio/components/EnhancePanel'
 import type { AudioTool } from '@/lib/navigation'
-import type { TransformBackend } from '@/services/types'
 
 /** Keeps a tool mounted while hidden, so its inputs and results survive navigation. */
 function ToolPanel({ active, children }: { active: boolean; children: ReactNode }) {
@@ -15,12 +14,11 @@ function ToolPanel({ active, children }: { active: boolean; children: ReactNode 
 }
 
 interface Props {
-  backend: TransformBackend
   tool: AudioTool
   onToolChange: (tool: AudioTool) => void
 }
 
-export default function AudioWorkspace({ backend, tool, onToolChange }: Props) {
+export default function AudioWorkspace({ tool, onToolChange }: Props) {
   // Decrypt input lives here so the encrypt result can hand its cipher WAV over.
   const [container, setContainer] = useState<File | null>(null)
 
@@ -34,23 +32,22 @@ export default function AudioWorkspace({ backend, tool, onToolChange }: Props) {
       <WorkspaceHeader section="audio" tool={tool} />
 
       <ToolPanel active={tool === 'encrypt'}>
-        <AudioEncryptPanel backend={backend} onOpenInDecrypt={openInDecrypt} />
+        <AudioEncryptPanel onOpenInDecrypt={openInDecrypt} />
       </ToolPanel>
       <ToolPanel active={tool === 'decrypt'}>
         <AudioDecryptPanel
-          backend={backend}
           container={container}
           onContainerChange={setContainer}
         />
       </ToolPanel>
       <ToolPanel active={tool === 'denoise'}>
-        <DenoisePanel backend={backend} />
+        <DenoisePanel />
       </ToolPanel>
       <ToolPanel active={tool === 'enhance'}>
-        <EnhancePanel backend={backend} />
+        <EnhancePanel />
       </ToolPanel>
       <ToolPanel active={tool === 'analysis'}>
-        <AudioRobustnessPanel backend={backend} />
+        <AudioRobustnessPanel />
       </ToolPanel>
     </div>
   )

@@ -9,9 +9,8 @@ import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_IMAGE, ACCEPT_PNG } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
 import { imageRobustnessReport } from '@/services/imageService'
-import type { TransformBackend } from '@/services/types'
 
-export function ImageRobustnessPanel({ backend }: { backend: TransformBackend }) {
+export function ImageRobustnessPanel() {
   const [cipherFile, setCipherFile] = useState<File | null>(null)
   const [original, setOriginal] = useState<File | null>(null)
   const [passphrase, setPassphrase] = useState('')
@@ -22,8 +21,8 @@ export function ImageRobustnessPanel({ backend }: { backend: TransformBackend })
 
   const handleRun = useCallback(() => {
     if (!cipherFile || !original) return
-    void execute({ cipherFile, original, passphrase, backend })
-  }, [backend, cipherFile, execute, original, passphrase])
+    void execute({ cipherFile, original, passphrase })
+  }, [cipherFile, execute, original, passphrase])
 
   return (
     <OperationShell
@@ -37,7 +36,7 @@ export function ImageRobustnessPanel({ backend }: { backend: TransformBackend })
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'attack-report',
+        'phaseforge', 'attack-report',
         cipherFile?.name ?? 'cipher.png', original?.name ?? 'original.png',
       )}
       result={

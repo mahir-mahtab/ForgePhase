@@ -8,15 +8,13 @@ import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_CIPHER_WAV } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
 import { decryptAudio } from '@/services/audioService'
-import type { TransformBackend } from '@/services/types'
 
 interface AudioDecryptPanelProps {
-  backend: TransformBackend
   container: File | null
   onContainerChange: (file: File | null) => void
 }
 
-export function AudioDecryptPanel({ backend, container, onContainerChange }: AudioDecryptPanelProps) {
+export function AudioDecryptPanel({ container, onContainerChange }: AudioDecryptPanelProps) {
   const [passphrase, setPassphrase] = useState('')
   const { state, execute, reset } = useOperation(decryptAudio)
 
@@ -25,8 +23,8 @@ export function AudioDecryptPanel({ backend, container, onContainerChange }: Aud
 
   const handleRun = useCallback(() => {
     if (!container) return
-    void execute({ container, passphrase, backend })
-  }, [backend, container, execute, passphrase])
+    void execute({ container, passphrase })
+  }, [container, execute, passphrase])
 
   return (
     <OperationShell
@@ -40,7 +38,7 @@ export function AudioDecryptPanel({ backend, container, onContainerChange }: Aud
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'audio-decrypt',
+        'phaseforge', 'audio-decrypt',
         container?.name ?? 'cipher.wav', 'restored.wav',
       )}
       result={

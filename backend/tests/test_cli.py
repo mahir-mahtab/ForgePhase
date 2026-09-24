@@ -146,10 +146,3 @@ def test_attack_report_on_audio(tmp_path, audio_file, capsys):
 def test_kpa_demo(capsys):
     run("kpa-demo", "--size", 32)
     assert "Chosen-plaintext attack" in capsys.readouterr().out
-
-
-def test_backend_flag_is_honoured(tmp_path, image_file):
-    cipher = tmp_path / "cipher.png"
-    run("--backend", "numpy", "image-encrypt", image_file, cipher,
-        "--passphrase", PASSPHRASE)
-    assert cipher.exists()

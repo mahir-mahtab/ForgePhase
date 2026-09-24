@@ -176,7 +176,6 @@ export async function fetchBackendInfo(signal?: AbortSignal): Promise<BackendInf
     if (!response.ok) return null
     const body = (await response.json()) as {
       version: string
-      transform: { available: string[] }
       limits: {
         max_image_pixels: number
         max_audio_samples: number
@@ -185,7 +184,6 @@ export async function fetchBackendInfo(signal?: AbortSignal): Promise<BackendInf
     }
     return {
       version: body.version,
-      backends: body.transform.available,
       limits: {
         maxImagePixels: body.limits.max_image_pixels,
         maxAudioSamples: body.limits.max_audio_samples,

@@ -9,9 +9,8 @@ import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_AUDIO, ACCEPT_CIPHER_WAV } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
 import { audioRobustnessReport } from '@/services/audioService'
-import type { TransformBackend } from '@/services/types'
 
-export function AudioRobustnessPanel({ backend }: { backend: TransformBackend }) {
+export function AudioRobustnessPanel() {
   const [ciphertext, setCiphertext] = useState<File | null>(null)
   const [original, setOriginal] = useState<File | null>(null)
   const [passphrase, setPassphrase] = useState('')
@@ -22,8 +21,8 @@ export function AudioRobustnessPanel({ backend }: { backend: TransformBackend })
 
   const handleRun = useCallback(() => {
     if (!ciphertext || !original) return
-    void execute({ ciphertext, original, passphrase, backend })
-  }, [backend, ciphertext, execute, original, passphrase])
+    void execute({ ciphertext, original, passphrase })
+  }, [ciphertext, execute, original, passphrase])
 
   return (
     <OperationShell
@@ -37,7 +36,7 @@ export function AudioRobustnessPanel({ backend }: { backend: TransformBackend })
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'attack-report',
+        'phaseforge', 'attack-report',
         ciphertext?.name ?? 'cipher.wav', original?.name ?? 'original.wav',
       )}
       result={

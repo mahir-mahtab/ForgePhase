@@ -9,9 +9,8 @@ import { ACCEPT_AUDIO } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
 import { SAMPLES } from '@/lib/samples'
 import { AUDIO_DEFAULTS, enhanceAudio } from '@/services/audioService'
-import type { TransformBackend } from '@/services/types'
 
-export function EnhancePanel({ backend }: { backend: TransformBackend }) {
+export function EnhancePanel() {
   const [file, setFile] = useState<File | null>(null)
   const [boost, setBoost] = useState<number>(AUDIO_DEFAULTS.boost)
   const [gateThreshold, setGateThreshold] = useState<number>(AUDIO_DEFAULTS.gateThreshold)
@@ -22,8 +21,8 @@ export function EnhancePanel({ backend }: { backend: TransformBackend }) {
 
   const handleRun = useCallback(() => {
     if (!file) return
-    void execute({ input: file, boost, gateThreshold, gateFloor, backend })
-  }, [backend, boost, execute, file, gateFloor, gateThreshold])
+    void execute({ input: file, boost, gateThreshold, gateFloor })
+  }, [boost, execute, file, gateFloor, gateThreshold])
 
   return (
     <OperationShell
@@ -37,7 +36,7 @@ export function EnhancePanel({ backend }: { backend: TransformBackend }) {
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'enhance', file?.name ?? 'speech.wav', 'enhanced.wav',
+        'phaseforge', 'enhance', file?.name ?? 'speech.wav', 'enhanced.wav',
         '--boost', boost, '--gate-threshold', gateThreshold, '--gate-floor', gateFloor,
       )}
       result={

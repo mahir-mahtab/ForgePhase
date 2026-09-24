@@ -9,7 +9,6 @@ import { KpaDemoPanel } from '@/features/image/components/KpaDemoPanel'
 import { SpectrumPanel } from '@/features/image/components/SpectrumPanel'
 import { WatermarkPanel } from '@/features/image/components/WatermarkPanel'
 import type { ImageTool } from '@/lib/navigation'
-import type { TransformBackend } from '@/services/types'
 
 /** Keeps a tool mounted while hidden, so its inputs and results survive navigation. */
 function ToolPanel({ active, children }: { active: boolean; children: ReactNode }) {
@@ -17,12 +16,11 @@ function ToolPanel({ active, children }: { active: boolean; children: ReactNode 
 }
 
 interface Props {
-  backend: TransformBackend
   tool: ImageTool
   onToolChange: (tool: ImageTool) => void
 }
 
-export default function ImageWorkspace({ backend, tool, onToolChange }: Props) {
+export default function ImageWorkspace({ tool, onToolChange }: Props) {
   // The decrypt input lives here so the encrypt result can hand its cipher over.
   const [cipherFile, setCipherFile] = useState<File | null>(null)
 
@@ -36,28 +34,27 @@ export default function ImageWorkspace({ backend, tool, onToolChange }: Props) {
       <WorkspaceHeader section="image" tool={tool} />
 
       <ToolPanel active={tool === 'encrypt'}>
-        <ImageEncryptPanel backend={backend} onOpenInDecrypt={openInDecrypt} />
+        <ImageEncryptPanel onOpenInDecrypt={openInDecrypt} />
       </ToolPanel>
       <ToolPanel active={tool === 'decrypt'}>
         <ImageDecryptPanel
-          backend={backend}
           cipherFile={cipherFile}
           onCipherChange={setCipherFile}
         />
       </ToolPanel>
       <ToolPanel active={tool === 'watermark'}>
-        <WatermarkPanel backend={backend} />
+        <WatermarkPanel />
       </ToolPanel>
       <ToolPanel active={tool === 'filter'}>
-        <FilterPanel backend={backend} />
+        <FilterPanel />
       </ToolPanel>
       <ToolPanel active={tool === 'spectrum'}>
-        <SpectrumPanel backend={backend} />
+        <SpectrumPanel />
       </ToolPanel>
       <ToolPanel active={tool === 'analysis'}>
         <div className="flex flex-col gap-6">
-          <ImageRobustnessPanel backend={backend} />
-          <KpaDemoPanel backend={backend} />
+          <ImageRobustnessPanel />
+          <KpaDemoPanel />
         </div>
       </ToolPanel>
     </div>

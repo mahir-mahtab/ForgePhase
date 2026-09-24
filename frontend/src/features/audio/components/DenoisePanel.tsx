@@ -9,9 +9,8 @@ import { ACCEPT_AUDIO } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
 import { SAMPLES } from '@/lib/samples'
 import { AUDIO_DEFAULTS, denoiseAudio } from '@/services/audioService'
-import type { TransformBackend } from '@/services/types'
 
-export function DenoisePanel({ backend }: { backend: TransformBackend }) {
+export function DenoisePanel() {
   const [file, setFile] = useState<File | null>(null)
   const [overSubtraction, setOverSubtraction] = useState<number>(AUDIO_DEFAULTS.overSubtraction)
   const [floor, setFloor] = useState<number>(AUDIO_DEFAULTS.floor)
@@ -22,8 +21,8 @@ export function DenoisePanel({ backend }: { backend: TransformBackend }) {
 
   const handleRun = useCallback(() => {
     if (!file) return
-    void execute({ input: file, overSubtraction, floor, noiseFrames, backend })
-  }, [backend, execute, file, floor, noiseFrames, overSubtraction])
+    void execute({ input: file, overSubtraction, floor, noiseFrames })
+  }, [execute, file, floor, noiseFrames, overSubtraction])
 
   return (
     <OperationShell
@@ -37,7 +36,7 @@ export function DenoisePanel({ backend }: { backend: TransformBackend }) {
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'denoise', file?.name ?? 'noisy.wav', 'denoised.wav',
+        'phaseforge', 'denoise', file?.name ?? 'noisy.wav', 'denoised.wav',
         '--over-subtraction', overSubtraction, '--floor', floor, '--noise-frames', noiseFrames,
       )}
       result={

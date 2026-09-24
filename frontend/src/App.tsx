@@ -5,7 +5,7 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
 import { Logo } from '@/components/layout/Logo'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { AudioTool, ImageTool } from '@/lib/navigation'
-import type { DomainKind, TransformBackend } from '@/services/types'
+import type { DomainKind } from '@/services/types'
 
 /**
  * Each workspace is its own chunk. Only a section that has been opened is
@@ -29,7 +29,6 @@ export default function App() {
     image: 'encrypt',
     audio: 'encrypt',
   })
-  const [backend, setBackend] = useState<TransformBackend>('numpy')
 
   const handleNavigate = useCallback((next: DomainKind, tool: string) => {
     setSection(next)
@@ -46,8 +45,6 @@ export default function App() {
         section={section}
         tools={tools}
         onNavigate={handleNavigate}
-        backend={backend}
-        onBackendChange={setBackend}
       >
         {/*
           Visited workspaces stay mounted and are only hidden, so files, form
@@ -57,7 +54,7 @@ export default function App() {
           <div hidden={section !== 'image'}>
             <ErrorBoundary>
               <Suspense fallback={WORKSPACE_FALLBACK}>
-                <ImageWorkspace backend={backend} tool={tools.image} onToolChange={setImageTool} />
+                <ImageWorkspace tool={tools.image} onToolChange={setImageTool} />
               </Suspense>
             </ErrorBoundary>
           </div>
@@ -66,7 +63,7 @@ export default function App() {
           <div hidden={section !== 'audio'}>
             <ErrorBoundary>
               <Suspense fallback={WORKSPACE_FALLBACK}>
-                <AudioWorkspace backend={backend} tool={tools.audio} onToolChange={setAudioTool} />
+                <AudioWorkspace tool={tools.audio} onToolChange={setAudioTool} />
               </Suspense>
             </ErrorBoundary>
           </div>

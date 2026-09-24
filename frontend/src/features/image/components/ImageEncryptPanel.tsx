@@ -13,14 +13,12 @@ import { ACCEPT_IMAGE } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
 import { SAMPLES } from '@/lib/samples'
 import { encryptImage } from '@/services/imageService'
-import type { TransformBackend } from '@/services/types'
 
 interface ImageEncryptPanelProps {
-  backend: TransformBackend
   onOpenInDecrypt: (cipher: File) => void
 }
 
-export function ImageEncryptPanel({ backend, onOpenInDecrypt }: ImageEncryptPanelProps) {
+export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
   const [file, setFile] = useState<File | null>(null)
   const [passphrase, setPassphrase] = useState('')
   const [greyscale, setGreyscale] = useState(false)
@@ -31,8 +29,8 @@ export function ImageEncryptPanel({ backend, onOpenInDecrypt }: ImageEncryptPane
 
   const handleRun = useCallback(() => {
     if (!file) return
-    void execute({ input: file, passphrase, greyscale, backend })
-  }, [backend, execute, file, greyscale, passphrase])
+    void execute({ input: file, passphrase, greyscale })
+  }, [execute, file, greyscale, passphrase])
 
   return (
     <OperationShell
@@ -46,7 +44,7 @@ export function ImageEncryptPanel({ backend, onOpenInDecrypt }: ImageEncryptPane
       onRun={handleRun}
       onReset={reset}
       command={cliCommand(
-        'phaseforge', '--backend', backend, 'image-encrypt',
+        'phaseforge', 'image-encrypt',
         file?.name ?? 'input.png', 'cipher.png',
         greyscale && '--greyscale',
       )}

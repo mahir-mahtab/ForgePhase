@@ -11,8 +11,7 @@ router = APIRouter(prefix="/api/audio", tags=["audio"])
 
 @router.post("/encrypt")
 async def encrypt(file: UploadFile = File(...), passphrase: str = Form(...),
-                  block_size: int = Form(drpe.DEFAULT_BLOCK_SIZE),
-                  backend: str = Form("numpy")):
+                  block_size: int = Form(drpe.DEFAULT_BLOCK_SIZE)):
     """Encrypt audio block by block, returning a single WAV that sounds like noise."""
     # Checked before the upload is decoded, so an absurd block size never
     # reaches an allocation.
@@ -25,12 +24,11 @@ async def encrypt(file: UploadFile = File(...), passphrase: str = Form(...),
                                             block_size=block_size)
         return support.audio_cipher_response(audio_cipher.encode(ciphertext, metadata))
 
-    return await support.run_job(work, backend=backend)
+    return await support.run_job(work)
 
 
 @router.post("/decrypt")
-async def decrypt(file: UploadFile = File(...), passphrase: str = Form(...),
-                  backend: str = Form("numpy")):
+async def decrypt(file: UploadFile = File(...), passphrase: str = Form(...)):
     """Decrypt a cipher WAV back to the original recording.
 
     As with images, a wrong passphrase yields noise rather than an error.
@@ -42,13 +40,12 @@ async def decrypt(file: UploadFile = File(...), passphrase: str = Form(...),
         signal = drpe.decrypt(ciphertext, passphrase, metadata)
         return support.audio_response(signal, metadata["sample_rate"], "restored.wav")
 
-    return await support.run_job(work, backend=backend)
+    return await support.run_job(work)
 
 
 @router.post("/denoise")
 async def denoise_audio(file: UploadFile = File(...), over_subtraction: float = Form(2.0),
-                        floor: float = Form(0.05), noise_frames: int = Form(6),
-                        backend: str = Form("numpy")):
+                        floor: float = Form(0.05), noise_frames: int = Form(6)):
     """Reduce background noise by spectral subtraction.
 
     The noise profile is estimated from the opening frames, so the recording
@@ -64,13 +61,12 @@ async def denoise_audio(file: UploadFile = File(...), over_subtraction: float = 
         support.ensure_finite(cleaned, "denoised audio")
         return support.audio_response(cleaned, sample_rate, "denoised.wav")
 
-    return await support.run_job(work, backend=backend)
+    return await support.run_job(work)
 
 
 @router.post("/enhance")
 async def enhance_audio(file: UploadFile = File(...), boost: float = Form(2.0),
-                        gate_threshold: float = Form(1.5), gate_floor: float = Form(0.1),
-                        backend: str = Form("numpy")):
+                        gate_threshold: float = Form(1.5), gate_floor: float = Form(0.1)):
     """Boost the speech band and gate low-energy bins."""
     payload = await support.read_upload(file)
 
@@ -82,4 +78,4 @@ async def enhance_audio(file: UploadFile = File(...), boost: float = Form(2.0),
         support.ensure_finite(enhanced, "enhanced audio")
         return support.audio_response(enhanced, sample_rate, "enhanced.wav")
 
-    return await support.run_job(work, backend=backend)
+    return await support.run_job(work)

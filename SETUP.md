@@ -56,9 +56,8 @@ http://localhost:5173
 
 The Vite development server proxies `/api` requests to the backend on port 8000.
 
-The header shows whether the API is reachable, and lets you switch the FFT
-implementation between NumPy and the hand-written custom backend. Inputs that
-have a matching demo file offer **Use sample**.
+The header shows whether the API is reachable. All transforms use NumPy's
+built-in FFT. Inputs that have a matching demo file offer **Use sample**.
 
 ## Image encryption workflow
 

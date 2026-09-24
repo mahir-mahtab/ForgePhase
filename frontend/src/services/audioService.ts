@@ -38,13 +38,11 @@ export function encryptAudio(
       file: request.input,
       passphrase: request.passphrase,
       block_size: String(request.blockSize),
-      backend: request.backend,
     }),
     'cipher.wav',
     [
       { label: 'Source', value: request.input.name },
       { label: 'Block size', value: `${request.blockSize} samples` },
-      { label: 'FFT backend', value: request.backend },
     ],
     request.signal,
   )
@@ -60,12 +58,10 @@ export function decryptAudio(
     form({
       file: request.container,
       passphrase: request.passphrase,
-      backend: request.backend,
     }),
     'restored.wav',
     [
       { label: 'Cipher', value: request.container.name },
-      { label: 'FFT backend', value: request.backend },
     ],
     request.signal,
   )
@@ -83,7 +79,6 @@ export function denoiseAudio(
       over_subtraction: String(request.overSubtraction),
       floor: String(request.floor),
       noise_frames: String(request.noiseFrames),
-      backend: request.backend,
     }),
     'denoised.wav',
     [
@@ -107,7 +102,6 @@ export function enhanceAudio(
       boost: String(request.boost),
       gate_threshold: String(request.gateThreshold),
       gate_floor: String(request.gateFloor),
-      backend: request.backend,
     }),
     'enhanced.wav',
     [
@@ -130,7 +124,6 @@ export function audioRobustnessReport(
       ciphertext: request.ciphertext,
       original: request.original,
       passphrase: request.passphrase,
-      backend: request.backend,
     }),
     normalizeReport,
     request.signal,
