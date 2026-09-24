@@ -1,7 +1,6 @@
 """Image and audio file handling."""
 
 import numpy as np
-import pytest
 
 from phaseforge.io import audio_io, image_io
 
@@ -104,8 +103,3 @@ def test_save_accepts_bare_1d_audio(tmp_path):
     audio_io.save_audio(path, np.zeros(400), 8000)
     loaded, _ = audio_io.load_audio(path)
     assert loaded.shape == (1, 400)
-
-
-def test_to_mono_averages_channels():
-    stereo = np.array([[1.0, 0.0], [0.0, 1.0]])
-    assert np.allclose(audio_io.to_mono(stereo), [0.5, 0.5])

@@ -95,6 +95,31 @@ def block_slice(image_shape, watermark_shape, position=0.25):
     return (slice(row, row + wm_h), slice(col, col + wm_w))
 
 
+# Target RMS pixel change, as a fraction of full scale, per unit of strength
+# for a full-intensity mark. At the default strength of 0.15 this is under two
+# grey levels: invisible, but comfortably above 8-bit rounding (1/255), which
+# a mark scaled to the spectrum's mean magnitude was not on any real-sized
+# image -- saving the result as a PNG erased it.
+_PIXEL_CHANGE_PER_STRENGTH = 0.05
+
+
+def _scale(image_shape, watermark_shape, strength):
+    """Spectral amplitude that spreads to a fixed RMS change in pixel space.
+
+    By Parseval, ``m`` bins of amplitude ``a`` (plus their ``m`` mirrors)
+    change an ``N``-pixel image by ``a * sqrt(2m) / N`` RMS. Depending only on
+    the shapes, the scale is the same at embed and extract time.
+    """
+    pixels = image_shape[-2] * image_shape[-1]
+    bins = 2 * watermark_shape[-2] * watermark_shape[-1]
+    return strength * _PIXEL_CHANGE_PER_STRENGTH * pixels / np.sqrt(bins)
+
+
+def _usable_channels(spectrum):
+    """Channels with spectral energy; an all-black plane cannot carry a mark."""
+    return np.mean(np.abs(spectrum), axis=(-2, -1)) > 1e-12
+
+
 def _check_strength(strength):
     if not np.isfinite(strength) or strength <= 0:
         raise ValueError(f"strength must be a positive number, got {strength}")
@@ -114,11 +139,9 @@ def embed(image, watermark, strength=0.15, position=0.25):
     delta = np.zeros(image.shape)
     delta[(..., *region)] = watermark
     delta = delta + _mirror(delta)
+    delta[~_usable_channels(spectrum)] = 0.0
 
-    # Scale by the mean magnitude so a given strength means the same thing
-    # regardless of image brightness or size.
-    scale = strength * np.mean(np.abs(spectrum), axis=(-2, -1), keepdims=True)
-    magnitude = np.abs(spectrum) + scale * delta
+    magnitude = np.abs(spectrum) + _scale(image.shape, watermark.shape, strength) * delta
     marked = magnitude * np.exp(1j * np.angle(spectrum))
 
     return np.real(transform.ifft2(transform.ifftshift(marked, axes=(-2, -1))))
@@ -140,11 +163,10 @@ def extract(original, watermarked, watermark_shape, strength=0.15, position=0.25
     spectrum = transform.fftshift(transform.fft2(original), axes=(-2, -1))
     marked = transform.fftshift(transform.fft2(watermarked), axes=(-2, -1))
 
-    energy = np.mean(np.abs(spectrum), axis=(-2, -1))
-    usable = energy > 1e-12
+    usable = _usable_channels(spectrum)
     if not np.any(usable):
         raise ValueError("the original image has no spectral energy to carry a watermark")
 
-    scale = strength * energy[usable][:, None, None]
+    scale = _scale(original.shape, watermark_shape, strength)
     difference = (np.abs(marked[usable]) - np.abs(spectrum[usable])) / scale
     return np.mean(difference[(..., *region)], axis=0)

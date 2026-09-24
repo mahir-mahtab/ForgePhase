@@ -1,22 +1,11 @@
 import { useCallback, useSyncExternalStore } from 'react'
 
-export type Theme = 'light' | 'dark'
+type Theme = 'light' | 'dark'
 
 /** Versioned key: a schema change becomes a new key, not a parse failure. */
 const STORAGE_KEY = 'phaseforge:theme:v1'
 
 const listeners = new Set<() => void>()
-
-function readStoredTheme(): Theme | null {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    return stored === 'light' || stored === 'dark' ? stored : null
-  } catch {
-    // Throws in private browsing, when the quota is full, or when storage is
-    // disabled outright. A missing preference is not an error.
-    return null
-  }
-}
 
 function currentTheme(): Theme {
   return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
@@ -49,15 +38,9 @@ function applyTheme(theme: Theme) {
 export function useTheme() {
   const theme = useSyncExternalStore(subscribe, currentTheme, () => 'dark' as const)
 
-  const setTheme = useCallback((next: Theme) => {
-    applyTheme(next)
-  }, [])
-
   const toggleTheme = useCallback(() => {
     applyTheme(currentTheme() === 'dark' ? 'light' : 'dark')
   }, [])
 
-  return { theme, setTheme, toggleTheme }
+  return { theme, toggleTheme }
 }
-
-export { readStoredTheme }

@@ -26,8 +26,3 @@ def save_audio(path, data, sample_rate, subtype="PCM_16", format=None):
         data = data[None, :]
     sf.write(path, np.clip(data.T, -1.0, 1.0), int(sample_rate), subtype=subtype,
              format=format)
-
-
-def to_mono(data):
-    """Average a ``(channels, samples)`` array down to a single channel."""
-    return np.mean(np.asarray(data, dtype=np.float64), axis=0)

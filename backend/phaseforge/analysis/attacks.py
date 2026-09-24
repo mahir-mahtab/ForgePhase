@@ -58,11 +58,6 @@ def quantize(ciphertext, bits=8):
     return crush(np.real(ciphertext)) + 1j * crush(np.imag(ciphertext))
 
 
-def clip(signal, threshold=0.5):
-    """Hard-clip a waveform, simulating a too-hot playback chain."""
-    return np.clip(np.asarray(signal), -threshold, threshold)
-
-
 IMAGE_ATTACKS = {
     "none": lambda c: c,
     "noise_5pct": lambda c: add_noise(c, 0.05),
@@ -103,12 +98,6 @@ def robustness_report(original, ciphertext, passphrase, metadata, attacks=None):
     return report
 
 
-def wrong_key_report(original, ciphertext, metadata, wrong_passphrase):
-    """Metrics for decryption with an incorrect passphrase."""
-    decrypt, _, summarize = _dispatch(metadata)
-    return summarize(original, decrypt(ciphertext, wrong_passphrase, metadata))
-
-
 def chosen_plaintext_attack(oracle, shape):
     """Recover both DRPE masks from two probe encryptions under a reused key.
 
@@ -125,8 +114,6 @@ def chosen_plaintext_attack(oracle, shape):
     constant. Probing with a flat image then exposes ``M1``. The leftover
     constant cancels between the two, so recovery is exact.
     """
-    height, width = shape
-
     impulse = np.zeros(shape)
     impulse[0, 0] = 1.0
     mask_b_estimate = transform.fft2(np.squeeze(oracle(impulse)))

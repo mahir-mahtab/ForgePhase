@@ -166,7 +166,7 @@ def cmd_kpa_demo(args):
     recovered = crack(ciphertext)
 
     print("Chosen-plaintext attack against a reused DRPE key:")
-    print(f"  probes used         : 2")
+    print("  probes used         : 2")
     print(f"  correlation         : {metrics.normalized_correlation(secret, recovered):.6f}")
     print(f"  max absolute error  : {np.max(np.abs(recovered - secret)):.2e}")
     print("  the passphrase was never guessed; linearity alone gave up the keys.")

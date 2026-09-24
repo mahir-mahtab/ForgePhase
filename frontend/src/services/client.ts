@@ -10,28 +10,9 @@ import type {
 } from '@/services/types'
 
 /** Same-origin by default; Vite proxies `/api` to the Python process. */
-export const API_BASE_URL: string = (
+const API_BASE_URL: string = (
   import.meta.env.VITE_API_BASE_URL ?? '/api'
 ).replace(/\/$/, '')
-
-const OPERATION_LABELS: Record<OperationId, string> = {
-  'image-encrypt': 'Image encryption',
-  'image-decrypt': 'Image decryption',
-  'watermark-embed': 'Watermark embedding',
-  'watermark-extract': 'Watermark extraction',
-  filter: 'Frequency filtering',
-  spectrum: 'Spectrum preview',
-  'audio-encrypt': 'Audio encryption',
-  'audio-decrypt': 'Audio decryption',
-  denoise: 'Denoising',
-  enhance: 'Speech enhancement',
-  'attack-report': 'Robustness report',
-  'kpa-demo': 'Key-reuse attack demo',
-}
-
-export function operationLabel(operation: OperationId): string {
-  return OPERATION_LABELS[operation]
-}
 
 const UNREACHABLE =
   'Could not reach the PhaseForge backend. Start it on port 8000 (see the banner above) and try again.'

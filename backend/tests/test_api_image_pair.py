@@ -3,7 +3,6 @@
 import io
 
 import numpy as np
-import pytest
 from fastapi.testclient import TestClient
 
 from phaseforge.analysis import metrics

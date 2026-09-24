@@ -22,7 +22,8 @@ async def encrypt(file: UploadFile = File(...), passphrase: str = Form(...),
         signal, sample_rate = support.decode_audio(payload)
         ciphertext, metadata = drpe.encrypt(signal, passphrase, sample_rate,
                                             block_size=block_size)
-        return support.audio_cipher_response(audio_cipher.encode(ciphertext, metadata))
+        return support.file_response(
+            audio_cipher.encode(ciphertext, metadata), "audio/wav", "cipher.wav")
 
     return await support.run_job(work)
 

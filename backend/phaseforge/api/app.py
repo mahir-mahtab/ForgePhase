@@ -66,7 +66,6 @@ def create_app():
         return {
             "version": __version__,
             "limits": {
-                "max_upload_bytes": support.MAX_UPLOAD_BYTES,
                 "max_image_pixels": support.MAX_IMAGE_PIXELS,
                 "max_audio_samples": support.MAX_AUDIO_SAMPLES,
                 "max_audio_channels": support.MAX_AUDIO_CHANNELS,

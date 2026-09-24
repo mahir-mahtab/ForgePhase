@@ -12,7 +12,6 @@ streamed straight back, so there are no temp files to leak or clean up.
 
 import io
 import os
-import zipfile
 
 import anyio
 import numpy as np
@@ -20,15 +19,11 @@ from fastapi import HTTPException, UploadFile
 from fastapi.responses import Response
 from PIL import Image
 
-from ..io import audio_cipher, audio_io, container, image_cipher, image_io
+from ..io import audio_cipher, audio_io, image_cipher, image_io
 
-MAX_UPLOAD_BYTES = None
-MAX_DECOMPRESSED_BYTES = 512 * 1024 * 1024
 MAX_IMAGE_PIXELS = 1024 * 1024
 MAX_AUDIO_SAMPLES = 48_000 * 60
 MAX_AUDIO_CHANNELS = 2
-
-_CHUNK = 64 * 1024
 
 # How many transforms may run at once. Each can hold several complex128 copies
 # of a padded image, so this bounds peak memory rather than CPU alone.
@@ -54,23 +49,12 @@ async def run_job(work, *args):
     return await anyio.to_thread.run_sync(work, *args, limiter=_job_limiter())
 
 
-async def read_upload(upload: UploadFile, limit=MAX_UPLOAD_BYTES):
-    """Read an upload into memory.
-
-    ``limit`` remains available to callers that need a route-specific cap, but
-    uploads are unlimited by default. Reading in chunks avoids requiring one
-    additional contiguous allocation while receiving the file.
-    """
-    chunks = []
-    total = 0
-    while chunk := await upload.read(_CHUNK):
-        total += len(chunk)
-        if limit is not None and total > limit:
-            raise HTTPException(413, f"file exceeds the {limit // (1024 * 1024)} MB limit")
-        chunks.append(chunk)
-    if not chunks:
+async def read_upload(upload: UploadFile):
+    """Read an upload into memory, rejecting an empty file."""
+    data = await upload.read()
+    if not data:
         raise HTTPException(400, "uploaded file is empty")
-    return b"".join(chunks)
+    return data
 
 
 def decode_image(data, greyscale=False):
@@ -113,42 +97,16 @@ def decode_audio(data):
     return signal, sample_rate
 
 
-def decode_container(data):
-    """Decode a ``.npz`` ciphertext, guarding against a decompression bomb.
-
-    A small zip can expand to gigabytes, so the uncompressed size is checked
-    from the archive index before anything is actually decompressed.
-    """
-    try:
-        with zipfile.ZipFile(io.BytesIO(data)) as archive:
-            declared = sum(entry.file_size for entry in archive.infolist())
-    except zipfile.BadZipFile:
-        raise HTTPException(400, "that file is not a PhaseForge container")
-
-    if declared > MAX_DECOMPRESSED_BYTES:
-        raise HTTPException(413, "container expands to more than the allowed size")
-
-    try:
-        return container.load_container(io.BytesIO(data))
-    except ValueError as error:
-        raise HTTPException(400, str(error))
-
-
 def image_response(array, filename, mode=None):
     buffer = io.BytesIO()
     image_io.save_image(buffer, array, mode=mode, format="PNG")
-    return _attachment(buffer.getvalue(), "image/png", filename)
+    return file_response(buffer.getvalue(), "image/png", filename)
 
 
 def audio_response(array, sample_rate, filename):
     buffer = io.BytesIO()
     audio_io.save_audio(buffer, array, sample_rate, format="WAV")
-    return _attachment(buffer.getvalue(), "audio/wav", filename)
-
-
-def audio_cipher_response(wav, filename="cipher.wav"):
-    """Return the single noise-like WAV that holds an audio ciphertext."""
-    return _attachment(wav, "audio/wav", filename)
+    return file_response(buffer.getvalue(), "audio/wav", filename)
 
 
 def decode_audio_cipher(data):
@@ -159,17 +117,6 @@ def decode_audio_cipher(data):
         raise HTTPException(413, str(error)) from error
     except ValueError as error:
         raise HTTPException(400, str(error)) from error
-
-
-def container_response(data, metadata, filename):
-    buffer = io.BytesIO()
-    container.save_container(buffer, data, metadata)
-    return _attachment(buffer.getvalue(), "application/octet-stream", filename)
-
-
-def image_cipher_png_response(png, filename="cipher.png"):
-    """Return the single noise-like PNG that holds an image ciphertext."""
-    return _attachment(png, "image/png", filename)
 
 
 # Each spatial axis can grow to the next power of two, and colour channels are
@@ -192,22 +139,7 @@ def decode_image_cipher(data):
         raise HTTPException(400, str(error)) from error
 
 
-def decode_image_cipher_pair(real_data, imaginary_data):
-    """Decode a pair while applying the same resource limits as image uploads."""
-    try:
-        return image_cipher.decode_pair(
-            real_data,
-            imaginary_data,
-            max_original_pixels=MAX_IMAGE_PIXELS,
-            max_cipher_pixels=_MAX_CIPHER_PIXELS,
-        )
-    except image_cipher.CipherImageTooLarge as error:
-        raise HTTPException(413, str(error)) from error
-    except ValueError as error:
-        raise HTTPException(400, str(error)) from error
-
-
-def _attachment(payload, media_type, filename):
+def file_response(payload, media_type, filename):
     return Response(
         content=payload,
         media_type=media_type,
@@ -234,10 +166,3 @@ def ensure_finite(array, what="result"):
     if not np.all(np.isfinite(array)):
         raise HTTPException(422, f"the {what} contains invalid values; try different parameters")
     return array
-
-
-def expect_kind(metadata, kind):
-    """Reject a container of the wrong type before it reaches a module."""
-    actual = metadata.get("kind")
-    if actual != kind:
-        raise HTTPException(400, f"expected a {kind} container, got {actual!r}")

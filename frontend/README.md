@@ -50,7 +50,7 @@ src/
 │   ├── image/                Encrypt, decrypt, watermark, filter, spectrum, analysis
 │   └── audio/                Encrypt, decrypt, denoise, enhance, analysis
 ├── hooks/                    useOperation, useBackendStatus, useImageSize, …
-├── lib/                      Pure helpers: CLI quoting, ZIP reader, report
+├── lib/                      Pure helpers: CLI quoting, report
 │                             parsing, filter mask and watermark-range ports
 └── services/                 The only code that talks to the network
 ```

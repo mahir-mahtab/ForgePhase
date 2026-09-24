@@ -1,4 +1,4 @@
-"""Regression tests for the findings in ``audit/AUDIT.md``.
+"""Regression tests for the hardening findings of an earlier security audit.
 
 Each test names the finding it guards, so a failure points straight at the
 behaviour that came back.

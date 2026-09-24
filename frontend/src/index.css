@@ -49,7 +49,6 @@
   --destructive: #c2261b;
   --destructive-foreground: #ffffff;
   --success: #1f7a4d;
-  --success-soft: #ddf3e4;
   --warning: #8a5a00;
   --warning-soft: #fff1c7;
 }
@@ -90,7 +89,6 @@
   --destructive: #f87171;
   --destructive-foreground: #141512;
   --success: #4ade80;
-  --success-soft: #0b2a18;
   --warning: #f5c451;
   --warning-soft: #2a2208;
 }
@@ -123,7 +121,6 @@
   --color-plate-edge: var(--plate-edge);
 
   --color-success: var(--success);
-  --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
 

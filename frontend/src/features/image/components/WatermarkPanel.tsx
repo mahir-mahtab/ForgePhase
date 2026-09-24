@@ -165,7 +165,7 @@ function EmbedPanel({
         label="Strength"
         description={STRENGTH_HELP}
         value={strength}
-        min={0.01}
+        min={0.05}
         max={1}
         step={0.01}
         disabled={isRunning}
@@ -316,7 +316,7 @@ function ExtractPanel({
         label="Strength"
         description="Must match the embed step."
         value={strength}
-        min={0.01}
+        min={0.05}
         max={1}
         step={0.01}
         disabled={isRunning}

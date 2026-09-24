@@ -23,7 +23,8 @@ async def encrypt(file: UploadFile = File(...), passphrase: str = Form(...),
         image, mode = support.decode_image(payload, greyscale)
         ciphertext, metadata = drpe.encrypt(image, passphrase)
         metadata["mode"] = mode
-        return support.image_cipher_png_response(image_cipher.encode(ciphertext, metadata))
+        return support.file_response(
+            image_cipher.encode(ciphertext, metadata), "image/png", "cipher.png")
 
     return await support.run_job(work)
 

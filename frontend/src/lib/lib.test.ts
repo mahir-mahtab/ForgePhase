@@ -5,32 +5,6 @@ import { formatBytes, formatMetric, humanizeKey } from '@/lib/format'
 import { maskGain } from '@/lib/mask'
 import { normalizeReport, parseMetric } from '@/lib/report'
 import { positionRange } from '@/lib/watermark'
-import { unzip } from '@/lib/zip'
-
-/** Build a ZIP with only local file headers, as the API's bundle has. */
-async function makeZip(
-  entries: Array<{ name: string; data: Uint8Array; deflate?: boolean }>,
-): Promise<Blob> {
-  const parts: Uint8Array[] = []
-  for (const entry of entries) {
-    let payload = entry.data
-    if (entry.deflate) {
-      const stream = new Blob([entry.data as Uint8Array<ArrayBuffer>])
-        .stream()
-        .pipeThrough(new CompressionStream('deflate-raw'))
-      payload = new Uint8Array(await new Response(stream).arrayBuffer())
-    }
-    const name = new TextEncoder().encode(entry.name)
-    const header = new DataView(new ArrayBuffer(30))
-    header.setUint32(0, 0x04034b50, true)
-    header.setUint16(8, entry.deflate ? 8 : 0, true)
-    header.setUint32(18, payload.length, true)
-    header.setUint32(22, entry.data.length, true)
-    header.setUint16(26, name.length, true)
-    parts.push(new Uint8Array(header.buffer), name, payload)
-  }
-  return new Blob(parts as Uint8Array<ArrayBuffer>[])
-}
 
 describe('parseMetric', () => {
   it('parses the strings the API uses for non-finite floats', () => {
@@ -131,23 +105,5 @@ describe('maskGain', () => {
     expect(maskGain(0.3, { ...base, kind: 'low', shape: 'butterworth' })).toBeCloseTo(0.5)
     expect(maskGain(0.31, { ...base, kind: 'high', shape: 'ideal' })).toBe(1)
     expect(maskGain(0.5, { ...base, kind: 'band', shape: 'ideal', highCutoff: 0.6 })).toBe(1)
-  })
-})
-
-describe('unzip', () => {
-  it('reads stored and deflated entries', async () => {
-    const zip = await makeZip([
-      { name: 'cipher-real.png', data: new Uint8Array([1, 2, 3]) },
-      { name: 'dir/cipher-imaginary.png', data: new Uint8Array(500).fill(7), deflate: true },
-    ])
-    const files = await unzip(zip, 'image/png')
-    expect([...files.keys()]).toEqual(['cipher-real.png', 'cipher-imaginary.png'])
-    const imaginary = files.get('cipher-imaginary.png')
-    expect(imaginary?.type).toBe('image/png')
-    expect(new Uint8Array(await imaginary!.arrayBuffer())).toEqual(new Uint8Array(500).fill(7))
-  })
-
-  it('rejects something that is not a ZIP', async () => {
-    await expect(unzip(new Blob(['hello']))).rejects.toThrow('not a valid ZIP')
   })
 })

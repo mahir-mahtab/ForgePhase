@@ -1,4 +1,4 @@
-import { FileArchive, FileAudio, FileImage, Upload, X } from 'lucide-react'
+import { FileAudio, FileImage, Upload, X } from 'lucide-react'
 import { memo, useCallback, useId, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -7,7 +7,7 @@ import { formatBytes } from '@/lib/format'
 import { type Sample, loadSample } from '@/lib/samples'
 import { cn } from '@/lib/utils'
 
-export type DropzoneKind = 'image' | 'audio' | 'file'
+type DropzoneKind = 'image' | 'audio'
 
 interface FileDropzoneProps {
   label: string
@@ -25,7 +25,6 @@ interface FileDropzoneProps {
 const KIND_ICONS = {
   image: <FileImage className="size-5" aria-hidden />,
   audio: <FileAudio className="size-5" aria-hidden />,
-  file: <FileArchive className="size-5" aria-hidden />,
 } as const
 
 function FileDropzoneImpl({
