@@ -10,9 +10,25 @@ import numpy as np
 from PIL import Image
 
 
+def _flatten_alpha(img):
+    """Composite any transparency onto white.
+
+    ``convert`` simply drops alpha, exposing whatever colour sits under
+    transparent pixels -- often black, which turns a logo on a transparent
+    background into a near-uniform grey.
+    """
+    if img.mode == "P" and "transparency" in img.info:
+        img = img.convert("RGBA")
+    if img.mode not in ("RGBA", "LA", "PA"):
+        return img
+    rgba = img.convert("RGBA")
+    background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+    return Image.alpha_composite(background, rgba).convert("RGB")
+
+
 def load_image(path, greyscale=False):
     """Return ``(array, mode)`` with array shaped ``(channels, height, width)``."""
-    img = Image.open(path)
+    img = _flatten_alpha(Image.open(path))
     if greyscale:
         img = img.convert("L")
     elif img.mode not in ("L", "RGB"):
@@ -24,6 +40,25 @@ def load_image(path, greyscale=False):
     else:
         data = np.moveaxis(data, -1, 0)
     return data, img.mode
+
+
+# Formats accepted as a key file. A key is a hash of the decoded pixels. JPEG is
+# allowed for convenience, but its decoders can differ by a value between
+# library builds, so a JPEG key is safest decrypted where it was encrypted.
+KEY_FORMATS = frozenset({"PNG", "BMP", "TIFF", "JPEG"})
+
+
+def check_key_format(path):
+    """Raise ``ValueError`` unless the image is an accepted key format. Reads the header only."""
+    with Image.open(path) as probe:
+        if probe.format not in KEY_FORMATS:
+            raise ValueError(f"key image must be PNG, JPEG, BMP or TIFF, not {probe.format}")
+
+
+def load_key_image(path):
+    """Load an image to use as key material, refusing unsupported formats."""
+    check_key_format(path)
+    return load_image(path)
 
 
 def save_image(path, data, mode=None, format=None):

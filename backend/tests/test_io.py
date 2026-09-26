@@ -103,3 +103,18 @@ def test_save_accepts_bare_1d_audio(tmp_path):
     audio_io.save_audio(path, np.zeros(400), 8000)
     loaded, _ = audio_io.load_audio(path)
     assert loaded.shape == (1, 400)
+
+
+def test_transparent_pixels_load_as_white(tmp_path):
+    from PIL import Image
+
+    # Transparent black around an opaque red square: dropping alpha would
+    # leave the border black and barely distinguishable from the red.
+    pixels = np.zeros((8, 8, 4), dtype=np.uint8)
+    pixels[2:6, 2:6] = (200, 0, 0, 255)
+    path = tmp_path / "logo.png"
+    Image.fromarray(pixels, mode="RGBA").save(path)
+
+    grey, _ = image_io.load_image(path, greyscale=True)
+    assert grey[0, 0, 0] == 1.0
+    assert grey[0, 3, 3] < 0.3

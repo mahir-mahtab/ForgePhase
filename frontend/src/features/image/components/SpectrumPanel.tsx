@@ -5,8 +5,10 @@ import { OperationShell } from '@/components/shared/OperationShell'
 import { ParamSlider } from '@/components/shared/ParamSlider'
 import { ResultPanel } from '@/components/shared/ResultPanel'
 import { useOperation } from '@/hooks/useOperation'
+import { usePixelLimit } from '@/hooks/usePixelLimit'
 import { ACCEPT_IMAGE } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
+import { PIXEL_LIMITS } from '@/lib/limits'
 import { SAMPLES } from '@/lib/samples'
 import { IMAGE_DEFAULTS, renderSpectrum } from '@/services/imageService'
 
@@ -16,7 +18,8 @@ export function SpectrumPanel() {
   const { state, execute, reset } = useOperation(renderSpectrum)
 
   const isRunning = state.phase === 'running'
-  const canRun = image !== null
+  const sizeError = usePixelLimit(image, PIXEL_LIMITS.edit)
+  const canRun = image !== null && sizeError === null
 
   const handleRun = useCallback(() => {
     if (image) void execute({ input: image, gamma })
@@ -28,7 +31,7 @@ export function SpectrumPanel() {
       description="Shows the log-scaled magnitude of the 2D Fourier transform, with the lowest frequencies at the centre. Give it an encrypted image and it shows the ciphertext itself, which should look like flat noise."
       runLabel="Show spectrum"
       canRun={canRun}
-      blockedReason="Choose an image."
+      blockedReason={image === null ? 'Choose an image.' : 'Choose a smaller image.'}
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
@@ -49,6 +52,7 @@ export function SpectrumPanel() {
         onFileChange={setImage}
         disabled={isRunning}
         sample={SAMPLES.image}
+        error={sizeError}
       />
 
       <ParamSlider

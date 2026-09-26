@@ -1,14 +1,14 @@
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
 import { KeySelector } from '@/components/shared/KeySelector'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { ResultPanel } from '@/components/shared/ResultPanel'
+import { useKeyInput } from '@/hooks/useKeyInput'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_CIPHER_WAV } from '@/lib/accept'
-import { cliCommand } from '@/lib/cli'
+import { cliCommand, keyCliArgs } from '@/lib/cli'
 import { decryptAudio } from '@/services/audioService'
-import type { KeyMode } from '@/services/types'
 
 interface AudioDecryptPanelProps {
   container: File | null
@@ -16,29 +16,22 @@ interface AudioDecryptPanelProps {
 }
 
 export function AudioDecryptPanel({ container, onContainerChange }: AudioDecryptPanelProps) {
-  const [keyMode, setKeyMode] = useState<KeyMode>('passphrase')
-  const [passphrase, setPassphrase] = useState('')
-  const [keyFile, setKeyFile] = useState<File | null>(null)
+  const key = useKeyInput()
   const { state, execute, reset } = useOperation(decryptAudio)
 
   const isRunning = state.phase === 'running'
-  const hasKey = keyMode === 'passphrase' ? passphrase.trim().length > 0 : keyFile !== null
-  const canRun = container !== null && hasKey
-  const blockedReason = !container
-    ? 'Add the encrypted audio.'
-    : keyMode === 'passphrase'
-      ? 'Enter the passphrase.'
-      : `Select the key ${keyMode} file.`
+  const canRun = container !== null && key.hasKey
+  const blockedReason = container === null ? 'Choose the encrypted audio.' : key.missingReason
 
   const handleRun = useCallback(() => {
     if (!container) return
-    void execute({ container, keyMode, passphrase, keyFile })
-  }, [container, execute, keyFile, keyMode, passphrase])
+    void execute({ container, ...key.options })
+  }, [container, execute, key.options])
 
   return (
     <OperationShell
       title="Decrypt audio"
-      description="Reads the sample rate and block layout stored inside the encrypted WAV, rebuilds the masks from your key (passphrase, image, or audio), and restores the waveform."
+      description="Reads the sample rate and block layout stored inside the encrypted WAV, rebuilds the masks from your key, and restores the waveform. There is no checksum: a wrong key gives noise, not an error."
       runLabel="Decrypt"
       canRun={canRun}
       blockedReason={blockedReason}
@@ -49,8 +42,7 @@ export function AudioDecryptPanel({ container, onContainerChange }: AudioDecrypt
       command={cliCommand(
         'phaseforge', 'audio-decrypt',
         container?.name ?? 'cipher.wav', 'restored.wav',
-        ...(keyMode === 'image' ? ['--key-image', keyFile?.name ?? 'key.png'] : []),
-        ...(keyMode === 'audio' ? ['--key-audio', keyFile?.name ?? 'key.wav'] : []),
+        ...keyCliArgs(key.options.keyMode, key.options.keyFile),
       )}
       result={
         <ResultPanel
@@ -58,8 +50,7 @@ export function AudioDecryptPanel({ container, onContainerChange }: AudioDecrypt
           idleHint="The restored audio appears here, ready to play."
           note={
             <p className="text-xs text-muted-foreground">
-              A wrong key decrypts to loud noise, so check the volume
-              before pressing play.
+              Loud static? The key is wrong.
             </p>
           }
         />
@@ -74,15 +65,7 @@ export function AudioDecryptPanel({ container, onContainerChange }: AudioDecrypt
         onFileChange={onContainerChange}
         disabled={isRunning}
       />
-      <KeySelector
-        keyMode={keyMode}
-        onKeyModeChange={setKeyMode}
-        passphrase={passphrase}
-        onPassphraseChange={setPassphrase}
-        keyFile={keyFile}
-        onKeyFileChange={setKeyFile}
-        disabled={isRunning}
-      />
+      <KeySelector {...key.selectorProps} disabled={isRunning} />
     </OperationShell>
   )
 }

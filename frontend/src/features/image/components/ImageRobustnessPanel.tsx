@@ -1,36 +1,41 @@
 import { useCallback, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
+import { KeySelector } from '@/components/shared/KeySelector'
 import { MetricsTable } from '@/components/shared/MetricsTable'
 import { OperationShell } from '@/components/shared/OperationShell'
-import { PassphraseField } from '@/components/shared/PassphraseField'
 import { ReportState } from '@/components/shared/ReportState'
+import { useKeyInput } from '@/hooks/useKeyInput'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_IMAGE, ACCEPT_PNG } from '@/lib/accept'
-import { cliCommand } from '@/lib/cli'
+import { cliCommand, keyCliArgs } from '@/lib/cli'
 import { imageRobustnessReport } from '@/services/imageService'
 
 export function ImageRobustnessPanel() {
   const [cipherFile, setCipherFile] = useState<File | null>(null)
   const [original, setOriginal] = useState<File | null>(null)
-  const [passphrase, setPassphrase] = useState('')
+  const key = useKeyInput()
   const { state, execute, reset } = useOperation(imageRobustnessReport)
 
   const isRunning = state.phase === 'running'
-  const canRun = cipherFile !== null && original !== null && passphrase.length > 0
+  const canRun = cipherFile !== null && original !== null && key.hasKey
+  const blockedReason =
+    cipherFile === null || original === null
+      ? 'Choose the encrypted image and the original.'
+      : key.missingReason
 
   const handleRun = useCallback(() => {
     if (!cipherFile || !original) return
-    void execute({ cipherFile, original, passphrase })
-  }, [cipherFile, execute, original, passphrase])
+    void execute({ cipherFile, original, ...key.options })
+  }, [cipherFile, execute, key.options, original])
 
   return (
     <OperationShell
       title="Robustness report"
-      description="Damages the ciphertext in several ways (noise, a missing block, coarse quantization), decrypts each copy with the correct passphrase, and scores the result against the original."
+      description="Damages the encrypted image in several ways (noise, a missing block, coarse quantization), decrypts each copy with the correct key, and scores the result against the original."
       runLabel="Run report"
       canRun={canRun}
-      blockedReason="Add the encrypted image, the original image and the passphrase."
+      blockedReason={blockedReason}
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
@@ -38,6 +43,7 @@ export function ImageRobustnessPanel() {
       command={cliCommand(
         'phaseforge', 'attack-report',
         cipherFile?.name ?? 'cipher.png', original?.name ?? 'original.png',
+        ...keyCliArgs(key.options.keyMode, key.options.keyFile),
       )}
       result={
         <ReportState
@@ -58,19 +64,14 @@ export function ImageRobustnessPanel() {
       />
       <FileDropzone
         label="Original image"
-        hint="the unencrypted file"
+        hint="the image before encryption"
         kind="image"
         accept={ACCEPT_IMAGE}
         file={original}
         onFileChange={setOriginal}
         disabled={isRunning}
       />
-      <PassphraseField
-        value={passphrase}
-        onChange={setPassphrase}
-        hint="The passphrase used to encrypt."
-        disabled={isRunning}
-      />
+      <KeySelector {...key.selectorProps} disabled={isRunning} />
     </OperationShell>
   )
 }

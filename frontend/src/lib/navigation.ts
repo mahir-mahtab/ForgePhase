@@ -27,13 +27,13 @@ export const IMAGE_TOOLS = [
     value: 'encrypt',
     label: 'Encrypt',
     icon: Lock,
-    description: 'Scramble an image with double random phase encoding, keyed by a passphrase.',
+    description: 'Scramble an image with double random phase encoding, keyed by a passphrase or a key file.',
   },
   {
     value: 'decrypt',
     label: 'Decrypt',
     icon: LockOpen,
-    description: 'Rebuild both masks from the passphrase and reverse the transform.',
+    description: 'Rebuild both masks from your key and reverse the transform.',
   },
   {
     value: 'watermark',
@@ -66,7 +66,7 @@ export const AUDIO_TOOLS = [
     value: 'encrypt',
     label: 'Encrypt',
     icon: Lock,
-    description: 'Encrypt a recording block by block, keyed by a passphrase.',
+    description: 'Encrypt a recording block by block, keyed by a passphrase or a key file.',
   },
   {
     value: 'decrypt',

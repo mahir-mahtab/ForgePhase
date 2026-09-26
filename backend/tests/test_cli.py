@@ -143,8 +143,8 @@ def test_attack_report_on_audio(tmp_path, audio_file, capsys):
     assert "snr_db" in capsys.readouterr().out
 
 
-def test_kpa_demo(capsys):
-    run("kpa-demo", "--size", 32)
+def test_key_reuse_demo(capsys):
+    run("key-reuse-demo", "--size", 32)
     assert "Chosen-plaintext attack" in capsys.readouterr().out
 
 
@@ -177,3 +177,17 @@ def test_cli_audio_encrypt_decrypt_with_key_audio(tmp_path, audio_file):
     assert recovered.shape == original.shape
     assert metrics.snr(original, recovered) > 30
 
+
+
+def test_cli_rejects_unsupported_key_image(tmp_path, image_file, capsys):
+    from PIL import Image
+    key_file = tmp_path / "key.webp"
+    Image.fromarray(np.full((16, 16, 3), 128, np.uint8)).save(key_file)
+    argv = ["image-encrypt", image_file, tmp_path / "cipher.png", "--key-image", key_file]
+    assert cli.main([str(a) for a in argv]) != 0
+    assert "PNG, JPEG, BMP or TIFF" in capsys.readouterr().err
+
+
+def test_old_key_reuse_demo_name_still_works(capsys):
+    run("kpa-demo", "--size", 32)
+    assert "Chosen-plaintext attack" in capsys.readouterr().out

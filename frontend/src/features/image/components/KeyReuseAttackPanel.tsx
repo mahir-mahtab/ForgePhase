@@ -7,8 +7,8 @@ import { Label } from '@/components/ui/label'
 import { useOperation } from '@/hooks/useOperation'
 import { cliCommand } from '@/lib/cli'
 import { formatMetric } from '@/lib/format'
-import { runKpaDemo } from '@/services/imageService'
-import type { KpaDemoResult } from '@/services/types'
+import { runKeyReuseDemo } from '@/services/imageService'
+import type { KeyReuseDemoResult } from '@/services/types'
 
 const SIZES = [
   { value: '32', label: '32 px' },
@@ -18,7 +18,7 @@ const SIZES = [
 
 type Size = (typeof SIZES)[number]['value']
 
-function KpaResult({ result }: { result: KpaDemoResult }) {
+function KeyReuseResult({ result }: { result: KeyReuseDemoResult }) {
   const panels = [
     { key: 'secret', label: 'Secret image', src: result.images.secret },
     { key: 'ciphertext', label: 'Ciphertext (magnitude)', src: result.images.ciphertext },
@@ -56,9 +56,9 @@ function KpaResult({ result }: { result: KpaDemoResult }) {
   )
 }
 
-export function KpaDemoPanel() {
+export function KeyReuseAttackPanel() {
   const [size, setSize] = useState<Size>('64')
-  const { state, execute, reset } = useOperation(runKpaDemo)
+  const { state, execute, reset } = useOperation(runKeyReuseDemo)
   const isRunning = state.phase === 'running'
 
   const handleRun = useCallback(() => {
@@ -75,12 +75,12 @@ export function KpaDemoPanel() {
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
-      command={cliCommand('phaseforge', 'kpa-demo', '--size', size)}
+      command={cliCommand('phaseforge', 'key-reuse-demo', '--size', size)}
       result={
         <ReportState
           state={state}
           idleHint="The secret test image, its ciphertext, and what the attacker recovers."
-          render={(result) => <KpaResult result={result} />}
+          render={(result) => <KeyReuseResult result={result} />}
         />
       }
     >

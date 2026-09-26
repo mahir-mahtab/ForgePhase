@@ -1,14 +1,14 @@
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
 import { KeySelector } from '@/components/shared/KeySelector'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { ResultPanel } from '@/components/shared/ResultPanel'
+import { useKeyInput } from '@/hooks/useKeyInput'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_PNG } from '@/lib/accept'
-import { cliCommand } from '@/lib/cli'
+import { cliCommand, keyCliArgs } from '@/lib/cli'
 import { decryptImage } from '@/services/imageService'
-import type { KeyMode } from '@/services/types'
 
 interface ImageDecryptPanelProps {
   cipherFile: File | null
@@ -19,29 +19,22 @@ export function ImageDecryptPanel({
   cipherFile,
   onCipherChange,
 }: ImageDecryptPanelProps) {
-  const [keyMode, setKeyMode] = useState<KeyMode>('passphrase')
-  const [passphrase, setPassphrase] = useState('')
-  const [keyFile, setKeyFile] = useState<File | null>(null)
+  const key = useKeyInput()
   const { state, execute, reset } = useOperation(decryptImage)
 
   const isRunning = state.phase === 'running'
-  const hasKey = keyMode === 'passphrase' ? passphrase.trim().length > 0 : keyFile !== null
-  const canRun = cipherFile !== null && hasKey
-  const blockedReason = !cipherFile
-    ? 'Add the encrypted image.'
-    : keyMode === 'passphrase'
-      ? 'Enter the passphrase.'
-      : `Select the key ${keyMode} file.`
+  const canRun = cipherFile !== null && key.hasKey
+  const blockedReason = cipherFile === null ? 'Choose the encrypted image.' : key.missingReason
 
   const handleRun = useCallback(() => {
     if (!cipherFile) return
-    void execute({ cipherFile, keyMode, passphrase, keyFile })
-  }, [cipherFile, execute, keyFile, keyMode, passphrase])
+    void execute({ cipherFile, ...key.options })
+  }, [cipherFile, execute, key.options])
 
   return (
     <OperationShell
       title="Decrypt an image"
-      description="Rebuilds both masks from your key (passphrase, image, or audio) and reverses the transform. There is no checksum: a wrong key gives noise, not an error."
+      description="Rebuilds both masks from your key and reverses the transform. There is no checksum: a wrong key gives noise, not an error."
       runLabel="Decrypt"
       canRun={canRun}
       blockedReason={blockedReason}
@@ -52,8 +45,7 @@ export function ImageDecryptPanel({
       command={cliCommand(
         'phaseforge', 'image-decrypt',
         cipherFile?.name ?? 'cipher.png', 'restored.png',
-        ...(keyMode === 'image' ? ['--key-image', keyFile?.name ?? 'key.png'] : []),
-        ...(keyMode === 'audio' ? ['--key-audio', keyFile?.name ?? 'key.wav'] : []),
+        ...keyCliArgs(key.options.keyMode, key.options.keyFile),
       )}
       result={
         <ResultPanel
@@ -61,7 +53,7 @@ export function ImageDecryptPanel({
           idleHint="The restored image appears here."
           note={
             <p className="text-xs text-muted-foreground">
-              Looks like noise? The key is probably wrong.
+              Looks like noise? The key is wrong.
             </p>
           }
         />
@@ -76,15 +68,7 @@ export function ImageDecryptPanel({
         onFileChange={onCipherChange}
         disabled={isRunning}
       />
-      <KeySelector
-        keyMode={keyMode}
-        onKeyModeChange={setKeyMode}
-        passphrase={passphrase}
-        onPassphraseChange={setPassphrase}
-        keyFile={keyFile}
-        onKeyFileChange={setKeyFile}
-        disabled={isRunning}
-      />
+      <KeySelector {...key.selectorProps} disabled={isRunning} />
     </OperationShell>
   )
 }

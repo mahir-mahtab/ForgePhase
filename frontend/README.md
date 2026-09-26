@@ -17,7 +17,7 @@ the FastAPI backend.
 
 ## Getting started
 
-Start the backend first (see `../SETUP.md`), then:
+Start the backend first (see the [project README](../README.md)), then:
 
 ```bash
 npm install
@@ -44,14 +44,14 @@ src/
 ├── index.css                 Design tokens (light and dark)
 ├── components/
 │   ├── ui/                   shadcn primitives (vendored source)
-│   ├── layout/               Top bar, API status, theme toggle
-│   └── shared/               Operation card, dropzone, result views, tables
+│   ├── layout/               Sidebar, API status, theme toggle
+│   └── shared/               Operation card, dropzone, key selector, result views
 ├── features/
 │   ├── image/                Encrypt, decrypt, watermark, filter, spectrum, analysis
 │   └── audio/                Encrypt, decrypt, denoise, enhance, analysis
-├── hooks/                    useOperation, useBackendStatus, useImageSize, …
-├── lib/                      Pure helpers: CLI quoting, report
-│                             parsing, filter mask and watermark-range ports
+├── hooks/                    useOperation, useKeyInput, usePixelLimit, …
+├── lib/                      Pure helpers: CLI quoting, report parsing, and
+│                             ports of backend rules (mask, watermark, limits)
 └── services/                 The only code that talks to the network
 ```
 
@@ -62,22 +62,28 @@ src/
 - **State survives navigation.** Tabs are force-mounted and visited workspaces
   stay mounted, so switching tabs or between Image and Audio keeps files and
   results.
+- **One way to enter a key.** Every panel that encrypts, decrypts or analyses
+  a cipher uses `KeySelector` with the `useKeyInput` hook, so a passphrase,
+  key image or key audio file is validated, worded and sent the same way
+  everywhere.
 - **Handoffs.** Encrypt results have *Open in Decrypt*; a watermark embed has
-  *Check with Extract*, which fills in the matching size, strength and
-  position.
+  *Check with Extract*, which fills in the matching size, strength, position
+  and colour setting.
 - **Samples.** `public/samples` holds a test image, a watermark and two speech
   clips, offered via *Use sample* on the relevant inputs.
 - **Client-side ports.** `lib/mask.ts` mirrors `freq_edit.build_mask` for the
-  live filter preview, and `lib/watermark.ts` mirrors
-  `watermark.position_range` so invalid watermark positions are caught before
-  a request. Both are unit-tested against values from the Python side.
+  live filter preview, `lib/watermark.ts` mirrors `watermark.position_range`,
+  and `lib/limits.ts` mirrors the API's pixel limits, so an invalid watermark
+  position or an oversized image is caught before a request. The backend
+  still validates everything. Keep each in step with its Python original.
 - **Blob URLs** are created and revoked by `useObjectUrl`, never by the
   services, so previews stay valid under React StrictMode.
 
 ## Design
 
-Deliberately plain: neutral surfaces, one indigo accent, the system font, and
-a single radius scale. Light and dark themes are defined as tokens on `:root`
+Warm paper surfaces, near-black ink, a deep green accent and a lilac
+highlight on the main action; EB Garamond for titles over Figtree, and a
+single radius scale. Light and dark themes are defined as tokens on `:root`
 and `.dark` in `src/index.css`; an inline script in `index.html` applies the
 stored theme before first paint. Components reference tokens only, so the look
 can be changed from that one file.

@@ -1,3 +1,5 @@
+import type { KeyMode } from '@/services/types'
+
 /**
  * Build a copy-pasteable `phaseforge` command line.
  *
@@ -12,6 +14,16 @@ export function cliCommand(...parts: Array<string | number | false | null | unde
     )
     .map((part) => quote(String(part)))
     .join(' ')
+}
+
+/**
+ * The key flags for a command. A passphrase is left off: the CLI prompts for
+ * it, which keeps it out of shell history.
+ */
+export function keyCliArgs(keyMode: KeyMode, keyFile: File | null): string[] {
+  if (keyMode === 'image') return ['--key-image', keyFile?.name ?? 'key.png']
+  if (keyMode === 'audio') return ['--key-audio', keyFile?.name ?? 'key.wav']
+  return []
 }
 
 const SAFE = /^[\w@%+=:,./-]+$/

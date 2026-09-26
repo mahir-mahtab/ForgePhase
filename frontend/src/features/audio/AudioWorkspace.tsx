@@ -1,5 +1,6 @@
-import { type ReactNode, useCallback, useState } from 'react'
+import { useCallback, useState } from 'react'
 
+import { ToolPanel } from '@/components/shared/ToolPanel'
 import { WorkspaceHeader } from '@/components/shared/WorkspaceHeader'
 import { AudioDecryptPanel } from '@/features/audio/components/AudioDecryptPanel'
 import { AudioEncryptPanel } from '@/features/audio/components/AudioEncryptPanel'
@@ -7,11 +8,6 @@ import { AudioRobustnessPanel } from '@/features/audio/components/AudioRobustnes
 import { DenoisePanel } from '@/features/audio/components/DenoisePanel'
 import { EnhancePanel } from '@/features/audio/components/EnhancePanel'
 import type { AudioTool } from '@/lib/navigation'
-
-/** Keeps a tool mounted while hidden, so its inputs and results survive navigation. */
-function ToolPanel({ active, children }: { active: boolean; children: ReactNode }) {
-  return <div hidden={!active}>{children}</div>
-}
 
 interface Props {
   tool: AudioTool

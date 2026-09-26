@@ -19,6 +19,8 @@ interface FileDropzoneProps {
   disabled?: boolean
   /** Offers a one-click demo file. */
   sample?: Sample
+  /** Why the chosen file cannot be used, shown under it. */
+  error?: string | null
 }
 
 /** Hoisted: constant JSX allocates once instead of on every render. */
@@ -36,6 +38,7 @@ function FileDropzoneImpl({
   onFileChange,
   disabled = false,
   sample,
+  error,
 }: FileDropzoneProps) {
   const inputId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -113,6 +116,7 @@ function FileDropzoneImpl({
           isDragging && 'border-primary bg-accent-soft',
           disabled && 'cursor-not-allowed opacity-60',
           file && 'border-solid border-border bg-card',
+          file && error && 'border-destructive',
         )}
       >
         <input
@@ -180,6 +184,7 @@ function FileDropzoneImpl({
         <audio controls preload="metadata" src={audioUrl} className="h-9 w-full" />
       ) : null}
       {sampleError ? <p className="text-xs text-destructive">{sampleError}</p> : null}
+      {file && error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
   )
 }

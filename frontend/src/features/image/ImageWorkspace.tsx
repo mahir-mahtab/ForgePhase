@@ -1,19 +1,15 @@
-import { type ReactNode, useCallback, useState } from 'react'
+import { useCallback, useState } from 'react'
 
+import { ToolPanel } from '@/components/shared/ToolPanel'
 import { WorkspaceHeader } from '@/components/shared/WorkspaceHeader'
 import { FilterPanel } from '@/features/image/components/FilterPanel'
 import { ImageDecryptPanel } from '@/features/image/components/ImageDecryptPanel'
 import { ImageEncryptPanel } from '@/features/image/components/ImageEncryptPanel'
 import { ImageRobustnessPanel } from '@/features/image/components/ImageRobustnessPanel'
-import { KpaDemoPanel } from '@/features/image/components/KpaDemoPanel'
+import { KeyReuseAttackPanel } from '@/features/image/components/KeyReuseAttackPanel'
 import { SpectrumPanel } from '@/features/image/components/SpectrumPanel'
 import { WatermarkPanel } from '@/features/image/components/WatermarkPanel'
 import type { ImageTool } from '@/lib/navigation'
-
-/** Keeps a tool mounted while hidden, so its inputs and results survive navigation. */
-function ToolPanel({ active, children }: { active: boolean; children: ReactNode }) {
-  return <div hidden={!active}>{children}</div>
-}
 
 interface Props {
   tool: ImageTool
@@ -52,10 +48,8 @@ export default function ImageWorkspace({ tool, onToolChange }: Props) {
         <SpectrumPanel />
       </ToolPanel>
       <ToolPanel active={tool === 'analysis'}>
-        <div className="flex flex-col gap-6">
-          <ImageRobustnessPanel />
-          <KpaDemoPanel />
-        </div>
+        <ImageRobustnessPanel />
+        <KeyReuseAttackPanel />
       </ToolPanel>
     </div>
   )

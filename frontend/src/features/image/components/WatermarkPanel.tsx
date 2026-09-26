@@ -5,19 +5,23 @@ import { FileDropzone } from '@/components/shared/FileDropzone'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { ParamSlider } from '@/components/shared/ParamSlider'
 import { ResultPanel } from '@/components/shared/ResultPanel'
+import { SwitchField } from '@/components/shared/SwitchField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useImageSize } from '@/hooks/useImageSize'
 import { useOperation } from '@/hooks/useOperation'
+import { usePixelLimit } from '@/hooks/usePixelLimit'
 import { ACCEPT_IMAGE } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
+import { PIXEL_LIMITS } from '@/lib/limits'
 import { SAMPLES } from '@/lib/samples'
 import { positionRange } from '@/lib/watermark'
 import { IMAGE_DEFAULTS, embedWatermark, extractWatermark } from '@/services/imageService'
 
 const STRENGTH_HELP = 'Higher survives more damage but is easier to see.'
 const POSITION_HELP = 'How far above the centre of the spectrum the mark sits, as a fraction of the image height.'
+const COLOUR_HELP = 'Each colour channel carries its own plane of the mark. Slightly noisier, and a greyscale image still gets a grey mark.'
 
 /** What the embed step hands to the extract step for a one-click check. */
 interface ExtractInputs {
@@ -27,6 +31,7 @@ interface ExtractInputs {
   width: number
   strength: number
   position: number
+  colour: boolean
 }
 
 /**
@@ -77,6 +82,7 @@ function EmbedPanel({
   const [watermark, setWatermark] = useState<File | null>(null)
   const [strength, setStrength] = useState<number>(IMAGE_DEFAULTS.watermarkStrength)
   const [position, setPosition] = useState<number>(IMAGE_DEFAULTS.watermarkPosition)
+  const [colour, setColour] = useState(false)
   const { state, execute, reset } = useOperation(embedWatermark)
 
   const markSize = useImageSize(watermark)
@@ -87,23 +93,27 @@ function EmbedPanel({
   )
 
   const isRunning = state.phase === 'running'
-  const canRun = input !== null && watermark !== null && check.fits
+  const sizeError = usePixelLimit(input, PIXEL_LIMITS.edit)
+  const canRun = input !== null && watermark !== null && sizeError === null && check.fits
+  const markReading = colour ? 'kept in colour' : 'read as greyscale'
 
   const handleRun = useCallback(() => {
     if (!input || !watermark) return
-    void execute({ input, watermark, strength, position })
-  }, [execute, input, position, strength, watermark])
+    void execute({ input, watermark, strength, position, colour })
+  }, [colour, execute, input, position, strength, watermark])
 
   return (
     <OperationShell
       title="Embed a watermark"
-      description="Adds a greyscale mark to the magnitude spectrum, mirrored so the result stays a real image. Keep the original: extraction compares against it."
+      description="Adds a mark to the magnitude spectrum, mirrored so the result stays a real image. Keep the original: extraction compares against it."
       runLabel="Embed"
       canRun={canRun}
       blockedReason={
         input === null || watermark === null
           ? 'Choose an image and a watermark.'
-          : 'Adjust the position into the valid range.'
+          : sizeError
+            ? 'Choose a smaller image.'
+            : 'Adjust the position into the valid range.'
       }
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
@@ -113,6 +123,7 @@ function EmbedPanel({
         'phaseforge', 'watermark-embed',
         input?.name ?? 'input.png', watermark?.name ?? 'mark.png', 'watermarked.png',
         '--strength', strength, '--position', position,
+        colour && '--colour',
       )}
       result={
         <ResultPanel
@@ -131,6 +142,7 @@ function EmbedPanel({
                     width: markSize.width,
                     strength,
                     position,
+                    colour,
                   })
                 }
               >
@@ -150,10 +162,11 @@ function EmbedPanel({
         onFileChange={setInput}
         disabled={isRunning}
         sample={SAMPLES.image}
+        error={sizeError}
       />
       <FileDropzone
         label="Watermark"
-        hint={markSize ? `${markSize.width} × ${markSize.height}, read as greyscale` : 'read as greyscale'}
+        hint={markSize ? `${markSize.width} × ${markSize.height}, ${markReading}` : markReading}
         kind="image"
         accept={ACCEPT_IMAGE}
         file={watermark}
@@ -184,6 +197,13 @@ function EmbedPanel({
         />
         <RangeHint check={check} />
       </div>
+      <SwitchField
+        label="Colour watermark"
+        description={COLOUR_HELP}
+        checked={colour}
+        onCheckedChange={setColour}
+        disabled={isRunning}
+      />
     </OperationShell>
   )
 }
@@ -204,9 +224,11 @@ function ExtractPanel({
     setStrength: (value: number) => void
     position: number
     setPosition: (value: number) => void
+    colour: boolean
+    setColour: (value: boolean) => void
   }
 }) {
-  const { original, marked, height, width, strength, position } = inputs
+  const { original, marked, height, width, strength, position, colour } = inputs
   const { state, execute, reset } = useOperation(extractWatermark)
 
   const isRunning = state.phase === 'running'
@@ -231,8 +253,9 @@ function ExtractPanel({
       width: parsedWidth,
       strength,
       position,
+      colour,
     })
-  }, [execute, marked, original, parsedHeight, parsedWidth, position, sizeValid, strength])
+  }, [colour, execute, marked, original, parsedHeight, parsedWidth, position, sizeValid, strength])
 
   return (
     <OperationShell
@@ -256,6 +279,7 @@ function ExtractPanel({
         original?.name ?? 'original.png', marked?.name ?? 'watermarked.png', 'extracted.png',
         '--height', sizeValid ? parsedHeight : '?', '--width', sizeValid ? parsedWidth : '?',
         '--strength', strength, '--position', position,
+        colour && '--colour',
       )}
       result={
         <ResultPanel
@@ -335,6 +359,13 @@ function ExtractPanel({
         />
         <RangeHint check={check} />
       </div>
+      <SwitchField
+        label="Colour watermark"
+        description="Must match the embed step."
+        checked={colour}
+        onCheckedChange={inputs.setColour}
+        disabled={isRunning}
+      />
     </OperationShell>
   )
 }
@@ -347,6 +378,7 @@ export function WatermarkPanel() {
   const [width, setWidth] = useState('32')
   const [strength, setStrength] = useState<number>(IMAGE_DEFAULTS.watermarkStrength)
   const [position, setPosition] = useState<number>(IMAGE_DEFAULTS.watermarkPosition)
+  const [colour, setColour] = useState(false)
 
   const sendToExtract = useCallback((inputs: ExtractInputs) => {
     setOriginal(inputs.original)
@@ -355,6 +387,7 @@ export function WatermarkPanel() {
     setWidth(String(inputs.width))
     setStrength(inputs.strength)
     setPosition(inputs.position)
+    setColour(inputs.colour)
     document.getElementById('watermark-extract')?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
@@ -366,6 +399,7 @@ export function WatermarkPanel() {
           inputs={{
             original, setOriginal, marked, setMarked, height, setHeight,
             width, setWidth, strength, setStrength, position, setPosition,
+            colour, setColour,
           }}
         />
       </div>

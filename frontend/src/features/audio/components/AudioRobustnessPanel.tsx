@@ -1,36 +1,41 @@
 import { useCallback, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
+import { KeySelector } from '@/components/shared/KeySelector'
 import { MetricsTable } from '@/components/shared/MetricsTable'
 import { OperationShell } from '@/components/shared/OperationShell'
-import { PassphraseField } from '@/components/shared/PassphraseField'
 import { ReportState } from '@/components/shared/ReportState'
+import { useKeyInput } from '@/hooks/useKeyInput'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_AUDIO, ACCEPT_CIPHER_WAV } from '@/lib/accept'
-import { cliCommand } from '@/lib/cli'
+import { cliCommand, keyCliArgs } from '@/lib/cli'
 import { audioRobustnessReport } from '@/services/audioService'
 
 export function AudioRobustnessPanel() {
   const [ciphertext, setCiphertext] = useState<File | null>(null)
   const [original, setOriginal] = useState<File | null>(null)
-  const [passphrase, setPassphrase] = useState('')
+  const key = useKeyInput()
   const { state, execute, reset } = useOperation(audioRobustnessReport)
 
   const isRunning = state.phase === 'running'
-  const canRun = ciphertext !== null && original !== null && passphrase.length > 0
+  const canRun = ciphertext !== null && original !== null && key.hasKey
+  const blockedReason =
+    ciphertext === null || original === null
+      ? 'Choose the encrypted audio and the original.'
+      : key.missingReason
 
   const handleRun = useCallback(() => {
     if (!ciphertext || !original) return
-    void execute({ ciphertext, original, passphrase })
-  }, [ciphertext, execute, original, passphrase])
+    void execute({ ciphertext, original, ...key.options })
+  }, [ciphertext, execute, key.options, original])
 
   return (
     <OperationShell
       title="Robustness report"
-      description="Damages the encrypted audio with noise and coarse quantization, decrypts each copy with the correct passphrase, and scores the result against the original recording."
+      description="Damages the encrypted audio in several ways (noise, coarse quantization), decrypts each copy with the correct key, and scores the result against the original recording."
       runLabel="Run report"
       canRun={canRun}
-      blockedReason="Add the encrypted audio, the original audio and the passphrase."
+      blockedReason={blockedReason}
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
@@ -38,6 +43,7 @@ export function AudioRobustnessPanel() {
       command={cliCommand(
         'phaseforge', 'attack-report',
         ciphertext?.name ?? 'cipher.wav', original?.name ?? 'original.wav',
+        ...keyCliArgs(key.options.keyMode, key.options.keyFile),
       )}
       result={
         <ReportState
@@ -58,19 +64,14 @@ export function AudioRobustnessPanel() {
       />
       <FileDropzone
         label="Original audio"
-        hint="the unencrypted file"
+        hint="the recording before encryption"
         kind="audio"
         accept={ACCEPT_AUDIO}
         file={original}
         onFileChange={setOriginal}
         disabled={isRunning}
       />
-      <PassphraseField
-        value={passphrase}
-        onChange={setPassphrase}
-        hint="The passphrase used to encrypt."
-        disabled={isRunning}
-      />
+      <KeySelector {...key.selectorProps} disabled={isRunning} />
     </OperationShell>
   )
 }

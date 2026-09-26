@@ -5,15 +5,16 @@ import { FileDropzone } from '@/components/shared/FileDropzone'
 import { KeySelector } from '@/components/shared/KeySelector'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { ResultPanel } from '@/components/shared/ResultPanel'
+import { SwitchField } from '@/components/shared/SwitchField'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
+import { useKeyInput } from '@/hooks/useKeyInput'
 import { useOperation } from '@/hooks/useOperation'
+import { usePixelLimit } from '@/hooks/usePixelLimit'
 import { ACCEPT_IMAGE } from '@/lib/accept'
-import { cliCommand } from '@/lib/cli'
+import { cliCommand, keyCliArgs } from '@/lib/cli'
+import { PIXEL_LIMITS } from '@/lib/limits'
 import { SAMPLES } from '@/lib/samples'
 import { encryptImage } from '@/services/imageService'
-import type { KeyMode } from '@/services/types'
 
 interface ImageEncryptPanelProps {
   onOpenInDecrypt: (cipher: File) => void
@@ -21,30 +22,25 @@ interface ImageEncryptPanelProps {
 
 export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
   const [file, setFile] = useState<File | null>(null)
-  const [keyMode, setKeyMode] = useState<KeyMode>('passphrase')
-  const [passphrase, setPassphrase] = useState('')
-  const [keyFile, setKeyFile] = useState<File | null>(null)
+  const key = useKeyInput()
   const [greyscale, setGreyscale] = useState(false)
   const { state, execute, reset } = useOperation(encryptImage)
 
   const isRunning = state.phase === 'running'
-  const hasKey = keyMode === 'passphrase' ? passphrase.trim().length > 0 : keyFile !== null
-  const canRun = file !== null && hasKey
-  const blockedReason = !file
-    ? 'Choose an image.'
-    : keyMode === 'passphrase'
-      ? 'Enter a passphrase.'
-      : `Select a key ${keyMode} file.`
+  const sizeError = usePixelLimit(file, PIXEL_LIMITS.encrypt)
+  const canRun = file !== null && sizeError === null && key.hasKey
+  const blockedReason =
+    file === null ? 'Choose an image.' : sizeError ? 'Choose a smaller image.' : key.missingReason
 
   const handleRun = useCallback(() => {
     if (!file) return
-    void execute({ input: file, keyMode, passphrase, keyFile, greyscale })
-  }, [execute, file, greyscale, keyFile, keyMode, passphrase])
+    void execute({ input: file, ...key.options, greyscale })
+  }, [execute, file, greyscale, key.options])
 
   return (
     <OperationShell
       title="Encrypt an image"
-      description="Multiplies the image by a random phase mask, transforms it, and multiplies by a second mask in the frequency domain. Both masks are derived from your key (passphrase, image, or audio)."
+      description="Multiplies the image by a random phase mask, transforms it, and multiplies by a second mask in the frequency domain. Both masks are derived from your key."
       runLabel="Encrypt"
       canRun={canRun}
       blockedReason={blockedReason}
@@ -55,8 +51,7 @@ export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
       command={cliCommand(
         'phaseforge', 'image-encrypt',
         file?.name ?? 'input.png', 'cipher.png',
-        ...(keyMode === 'image' ? ['--key-image', keyFile?.name ?? 'key.png'] : []),
-        ...(keyMode === 'audio' ? ['--key-audio', keyFile?.name ?? 'key.wav'] : []),
+        ...keyCliArgs(key.options.keyMode, key.options.keyFile),
         greyscale && '--greyscale',
       )}
       result={
@@ -65,8 +60,8 @@ export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
           idleHint="The encrypted image appears here as a single noisy picture."
           note={
             <p className="text-xs text-muted-foreground">
-              Keep this PNG exactly as it is. It, plus the passphrase, is all you need to
-              decrypt. Re-saving it as JPEG or resizing it will destroy the image.
+              Keep this PNG exactly as it is: it and your key are all you need to decrypt.
+              Re-saving it as JPEG or resizing it destroys the image.
             </p>
           }
           actions={(result) => (
@@ -90,32 +85,18 @@ export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
         onFileChange={setFile}
         disabled={isRunning}
         sample={SAMPLES.image}
+        error={sizeError}
       />
 
-      <KeySelector
-        keyMode={keyMode}
-        onKeyModeChange={setKeyMode}
-        passphrase={passphrase}
-        onPassphraseChange={setPassphrase}
-        keyFile={keyFile}
-        onKeyFileChange={setKeyFile}
+      <KeySelector {...key.selectorProps} disabled={isRunning} />
+
+      <SwitchField
+        label="Convert to greyscale"
+        description="One channel instead of three: faster, with smaller output."
+        checked={greyscale}
+        onCheckedChange={setGreyscale}
         disabled={isRunning}
       />
-
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <Label htmlFor="image-encrypt-greyscale">Convert to greyscale</Label>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            One channel instead of three: faster, with smaller output.
-          </p>
-        </div>
-        <Switch
-          id="image-encrypt-greyscale"
-          checked={greyscale}
-          onCheckedChange={setGreyscale}
-          disabled={isRunning}
-        />
-      </div>
     </OperationShell>
   )
 }

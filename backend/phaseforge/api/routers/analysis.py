@@ -14,7 +14,7 @@ from .. import support
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
 
-class KpaRequest(BaseModel):
+class KeyReuseRequest(BaseModel):
     size: int = Field(default=64, ge=8, le=256,
                       description="side length of the probe image; a power of two")
 
@@ -73,8 +73,8 @@ def _png_data_url(array):
     return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
-@router.post("/kpa-demo")
-async def kpa_demo(request: KpaRequest):
+@router.post("/key-reuse-demo")
+async def key_reuse_demo(request: KeyReuseRequest):
     """Recover a plaintext with no passphrase, given a reused DRPE key.
 
     Two probe encryptions are enough: DRPE is linear, so an impulse probe

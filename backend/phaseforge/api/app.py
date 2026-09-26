@@ -67,6 +67,7 @@ def create_app():
             "version": __version__,
             "limits": {
                 "max_image_pixels": support.MAX_IMAGE_PIXELS,
+                "max_edit_pixels": support.MAX_EDIT_PIXELS,
                 "max_audio_samples": support.MAX_AUDIO_SAMPLES,
                 "max_audio_channels": support.MAX_AUDIO_CHANNELS,
                 "max_concurrent_jobs": support.MAX_CONCURRENT_JOBS,

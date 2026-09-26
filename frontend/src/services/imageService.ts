@@ -8,8 +8,8 @@ import type {
   ImageAttackReportRequest,
   ImageDecryptRequest,
   ImageEncryptRequest,
-  KpaDemoRequest,
-  KpaDemoResult,
+  KeyReuseDemoRequest,
+  KeyReuseDemoResult,
   RobustnessReport,
   ServiceResult,
   SpectrumRequest,
@@ -103,6 +103,7 @@ export function embedWatermark(
       watermark_file: request.watermark,
       strength: String(request.strength),
       position: String(request.position),
+      colour: String(request.colour),
     }),
     'watermarked.png',
     [
@@ -110,6 +111,7 @@ export function embedWatermark(
       { label: 'Watermark', value: request.watermark.name },
       { label: 'Strength', value: String(request.strength) },
       { label: 'Position', value: String(request.position) },
+      { label: 'Colour', value: request.colour ? 'Kept' : 'Greyscale' },
     ],
     request.signal,
   )
@@ -129,12 +131,14 @@ export function extractWatermark(
       width: String(request.width),
       strength: String(request.strength),
       position: String(request.position),
+      colour: String(request.colour),
     }),
     'watermark.png',
     [
       { label: 'Size', value: `${request.width} × ${request.height}` },
       { label: 'Strength', value: String(request.strength) },
       { label: 'Position', value: String(request.position) },
+      { label: 'Colour', value: request.colour ? 'Kept' : 'Greyscale' },
     ],
     request.signal,
   )
@@ -214,13 +218,13 @@ export function imageRobustnessReport(
   )
 }
 
-/** `phaseforge kpa-demo` -- recover a plaintext from a reused key. */
-export function runKpaDemo(
-  request: KpaDemoRequest,
-): Promise<ServiceResult<KpaDemoResult>> {
+/** `phaseforge key-reuse-demo` -- recover a plaintext from a reused key. */
+export function runKeyReuseDemo(
+  request: KeyReuseDemoRequest,
+): Promise<ServiceResult<KeyReuseDemoResult>> {
   return postJson(
-    'kpa-demo',
-    'analysis/kpa-demo',
+    'key-reuse-demo',
+    'analysis/key-reuse-demo',
     { size: request.size },
     (raw) => {
       const body = raw as {
@@ -228,7 +232,7 @@ export function runKpaDemo(
         probes_used: number
         correlation: unknown
         max_absolute_error: unknown
-        images: KpaDemoResult['images']
+        images: KeyReuseDemoResult['images']
       }
       return {
         size: body.size,

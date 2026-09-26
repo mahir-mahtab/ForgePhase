@@ -4,6 +4,7 @@ Each route reads its uploads on the event loop, then hands everything that
 touches pixels -- decoding, transforms, encoding -- to :func:`support.run_job`.
 """
 
+import numpy as np
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ...image import drpe, freq_edit, watermark
@@ -69,7 +70,7 @@ async def spectrum(file: UploadFile = File(...), gamma: float = Form(1.0)):
         if image_cipher.is_cipher_png(payload):
             data, _ = support.decode_image_cipher(payload)
         else:
-            data, _ = support.decode_image(payload)
+            data, _ = support.decode_image(payload, max_pixels=support.MAX_EDIT_PIXELS)
         return support.image_response(freq_edit.spectrum_preview(data, gamma), "spectrum.png")
 
     return await support.run_job(work)
@@ -83,7 +84,7 @@ async def filter_image(file: UploadFile = File(...), kind: str = Form("low"),
     payload = await support.read_upload(file)
 
     def work():
-        image, mode = support.decode_image(payload)
+        image, mode = support.decode_image(payload, max_pixels=support.MAX_EDIT_PIXELS)
         filtered = freq_edit.apply_filter(image, kind, cutoff, high_cutoff,
                                           filter_shape, order)
         return support.image_response(filtered, "filtered.png", mode)
@@ -93,15 +94,19 @@ async def filter_image(file: UploadFile = File(...), kind: str = Form("low"),
 
 @router.post("/watermark/embed")
 async def watermark_embed(file: UploadFile = File(...), watermark_file: UploadFile = File(...),
-                          strength: float = Form(0.15), position: float = Form(0.25)):
+                          strength: float = Form(0.15), position: float = Form(0.25),
+                          colour: bool = Form(False)):
     """Embed a watermark into the image's mid-frequency spectrum."""
     carrier = await support.read_upload(file)
     mark_data = await support.read_upload(watermark_file)
 
     def work():
-        image, mode = support.decode_image(carrier)
-        mark, _ = support.decode_image(mark_data, greyscale=True)
-        marked = watermark.embed(image, mark[0], strength, position)
+        image, mode = support.decode_image(carrier, max_pixels=support.MAX_EDIT_PIXELS)
+        # A greyscale carrier has one channel, so it can only hold a grey mark.
+        in_colour = colour and image.shape[0] > 1
+        mark, _ = support.decode_image(mark_data, greyscale=not in_colour, max_pixels=support.MAX_EDIT_PIXELS)
+        mark = np.broadcast_to(mark, image.shape[:1] + mark.shape[1:]) if in_colour else mark[0]
+        marked = watermark.embed(image, mark, strength, position)
         return support.image_response(marked, "watermarked.png", mode)
 
     return await support.run_job(work)
@@ -110,7 +115,8 @@ async def watermark_embed(file: UploadFile = File(...), watermark_file: UploadFi
 @router.post("/watermark/extract")
 async def watermark_extract(original: UploadFile = File(...), marked: UploadFile = File(...),
                             height: int = Form(...), width: int = Form(...),
-                            strength: float = Form(0.15), position: float = Form(0.25)):
+                            strength: float = Form(0.15), position: float = Form(0.25),
+                            colour: bool = Form(False)):
     """Recover an embedded watermark by differencing the two spectra."""
     if height < 1 or width < 1:
         raise HTTPException(400, "watermark height and width must be positive")
@@ -118,13 +124,13 @@ async def watermark_extract(original: UploadFile = File(...), marked: UploadFile
     marked_data = await support.read_upload(marked)
 
     def work():
-        original_image, _ = support.decode_image(original_data)
-        marked_image, _ = support.decode_image(marked_data)
+        original_image, _ = support.decode_image(original_data, max_pixels=support.MAX_EDIT_PIXELS)
+        marked_image, _ = support.decode_image(marked_data, max_pixels=support.MAX_EDIT_PIXELS)
         if original_image.shape != marked_image.shape:
             raise HTTPException(400, "the two images must have the same dimensions "
                                      "and colour mode")
         recovered = watermark.extract(original_image, marked_image, (height, width),
-                                      strength, position)
+                                      strength, position, colour=colour)
         return support.image_response(image_io.normalize(recovered), "watermark.png")
 
     return await support.run_job(work)

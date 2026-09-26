@@ -24,10 +24,10 @@ from .io import audio_cipher, audio_io, image_cipher, image_io
 def _passphrase(args):
     """Retrieve key material: from --key-image, --key-audio, --passphrase, or interactive prompt."""
     if getattr(args, "key_image", None):
-        img, _ = image_io.load_image(args.key_image)
+        img, _ = image_io.load_key_image(args.key_image)
         return img
     if getattr(args, "key_audio", None):
-        sig, _ = audio_io.load_audio(args.key_audio)
+        sig, _ = audio_io.load_key_audio(args.key_audio)
         return sig
     return args.passphrase or getpass.getpass("Passphrase: ")
 
@@ -95,8 +95,10 @@ def cmd_audio_decrypt(args):
 
 def cmd_watermark_embed(args):
     image, mode = image_io.load_image(args.input)
-    mark, _ = image_io.load_image(args.watermark, greyscale=True)
-    marked = watermark.embed(image, mark[0], args.strength, args.position)
+    colour = args.colour and image.shape[0] > 1
+    mark, _ = image_io.load_image(args.watermark, greyscale=not colour)
+    mark = np.broadcast_to(mark, image.shape[:1] + mark.shape[1:]) if colour else mark[0]
+    marked = watermark.embed(image, mark, args.strength, args.position)
     image_io.save_image(args.output, marked, mode)
     print(f"watermarked {args.input} -> {args.output} (strength {args.strength})")
 
@@ -105,7 +107,8 @@ def cmd_watermark_extract(args):
     original, _ = image_io.load_image(args.original)
     marked, _ = image_io.load_image(args.marked)
     shape = (args.height, args.width)
-    recovered = watermark.extract(original, marked, shape, args.strength, args.position)
+    recovered = watermark.extract(original, marked, shape, args.strength, args.position,
+                                  colour=args.colour)
     image_io.save_image(args.output, image_io.normalize(recovered))
     print(f"extracted watermark -> {args.output}")
 
@@ -159,7 +162,7 @@ def cmd_attack_report(args):
     print(json.dumps(_json_safe(report), indent=2, allow_nan=False))
 
 
-def cmd_kpa_demo(args):
+def cmd_key_reuse_demo(args):
     """Recover a plaintext with no passphrase, given a reused key."""
     shape = (args.size, args.size)
     oracle = attacks.build_oracle("a passphrase the attacker never learns")
@@ -183,8 +186,8 @@ def build_parser():
         prog="phaseforge", description="Fourier-domain image and audio security toolkit")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    def add(name, handler, help_text):
-        sub = subparsers.add_parser(name, help=help_text)
+    def add(name, handler, help_text, aliases=()):
+        sub = subparsers.add_parser(name, help=help_text, aliases=list(aliases))
         sub.set_defaults(handler=handler)
         return sub
 
@@ -222,6 +225,8 @@ def build_parser():
     sub.add_argument("output")
     sub.add_argument("--strength", type=float, default=0.15)
     sub.add_argument("--position", type=float, default=0.25)
+    sub.add_argument("--colour", action="store_true",
+                     help="keep the watermark's colour (colour images only)")
 
     sub = add("watermark-extract", cmd_watermark_extract, "recover an embedded watermark")
     sub.add_argument("original")
@@ -231,6 +236,8 @@ def build_parser():
     sub.add_argument("--width", type=int, required=True)
     sub.add_argument("--strength", type=float, default=0.15)
     sub.add_argument("--position", type=float, default=0.25)
+    sub.add_argument("--colour", action="store_true",
+                     help="keep the watermark's colour (colour images only)")
 
     sub = add("filter", cmd_filter, "low/high/band-pass an image in the frequency domain")
     sub.add_argument("input")
@@ -266,7 +273,9 @@ def build_parser():
     sub.add_argument("original", help="the matching plaintext file, for comparison")
     add_passphrase(sub)
 
-    sub = add("kpa-demo", cmd_kpa_demo, "demonstrate the chosen-plaintext break")
+    # "kpa-demo" is the command's old name, kept so existing scripts still run.
+    sub = add("key-reuse-demo", cmd_key_reuse_demo, "demonstrate the chosen-plaintext break",
+              aliases=["kpa-demo"])
     sub.add_argument("--size", type=int, default=64)
 
     return parser

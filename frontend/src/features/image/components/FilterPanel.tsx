@@ -15,8 +15,10 @@ import {
 } from '@/components/ui/select'
 import { MaskPreview } from '@/features/image/components/MaskPreview'
 import { useOperation } from '@/hooks/useOperation'
+import { usePixelLimit } from '@/hooks/usePixelLimit'
 import { ACCEPT_IMAGE } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
+import { PIXEL_LIMITS } from '@/lib/limits'
 import type { MaskParams } from '@/lib/mask'
 import { SAMPLES } from '@/lib/samples'
 import { IMAGE_DEFAULTS, applyFilter } from '@/services/imageService'
@@ -52,7 +54,8 @@ export function FilterPanel() {
   const isRunning = state.phase === 'running'
   const isBand = kind === 'band'
   const bandValid = !isBand || highCutoff > cutoff
-  const canRun = input !== null && bandValid
+  const sizeError = usePixelLimit(input, PIXEL_LIMITS.edit)
+  const canRun = input !== null && sizeError === null && bandValid
 
   const handleRun = useCallback(() => {
     if (!input || !bandValid) return
@@ -77,7 +80,13 @@ export function FilterPanel() {
       description="Applies a radial gain mask to the image's spectrum and transforms back. Cutoffs are fractions of the highest frequency, so they work at any image size."
       runLabel="Apply filter"
       canRun={canRun}
-      blockedReason={input === null ? 'Choose an image.' : 'The upper cutoff must be above the lower one.'}
+      blockedReason={
+        input === null
+          ? 'Choose an image.'
+          : sizeError
+            ? 'Choose a smaller image.'
+            : 'The upper cutoff must be above the lower one.'
+      }
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
@@ -106,6 +115,7 @@ export function FilterPanel() {
         onFileChange={setInput}
         disabled={isRunning}
         sample={SAMPLES.image}
+        error={sizeError}
       />
 
       <div className="flex flex-col gap-1.5">

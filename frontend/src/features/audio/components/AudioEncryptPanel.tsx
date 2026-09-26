@@ -14,12 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useKeyInput } from '@/hooks/useKeyInput'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_AUDIO } from '@/lib/accept'
-import { cliCommand } from '@/lib/cli'
+import { cliCommand, keyCliArgs } from '@/lib/cli'
 import { SAMPLES } from '@/lib/samples'
 import { AUDIO_DEFAULTS, BLOCK_SIZES, encryptAudio } from '@/services/audioService'
-import type { KeyMode } from '@/services/types'
 
 interface AudioEncryptPanelProps {
   onOpenInDecrypt: (container: File) => void
@@ -27,30 +27,23 @@ interface AudioEncryptPanelProps {
 
 export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
   const [file, setFile] = useState<File | null>(null)
-  const [keyMode, setKeyMode] = useState<KeyMode>('passphrase')
-  const [passphrase, setPassphrase] = useState('')
-  const [keyFile, setKeyFile] = useState<File | null>(null)
+  const key = useKeyInput()
   const [blockSize, setBlockSize] = useState<number>(AUDIO_DEFAULTS.blockSize)
   const { state, execute, reset } = useOperation(encryptAudio)
 
   const isRunning = state.phase === 'running'
-  const hasKey = keyMode === 'passphrase' ? passphrase.trim().length > 0 : keyFile !== null
-  const canRun = file !== null && hasKey
-  const blockedReason = !file
-    ? 'Choose an audio file.'
-    : keyMode === 'passphrase'
-      ? 'Enter a passphrase.'
-      : `Select a key ${keyMode} file.`
+  const canRun = file !== null && key.hasKey
+  const blockedReason = file === null ? 'Choose an audio file.' : key.missingReason
 
   const handleRun = useCallback(() => {
     if (!file) return
-    void execute({ input: file, keyMode, passphrase, keyFile, blockSize })
-  }, [blockSize, execute, file, keyFile, keyMode, passphrase])
+    void execute({ input: file, ...key.options, blockSize })
+  }, [blockSize, execute, file, key.options])
 
   return (
     <OperationShell
       title="Encrypt audio"
-      description="Cuts the waveform into fixed-size blocks and applies double random phase encoding to each, with a separate mask pair per block and channel."
+      description="Cuts the waveform into fixed-size blocks and applies double random phase encoding to each, with a separate mask pair per block and channel, all derived from your key."
       runLabel="Encrypt"
       canRun={canRun}
       blockedReason={blockedReason}
@@ -62,8 +55,7 @@ export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
         'phaseforge', 'audio-encrypt',
         file?.name ?? 'input.wav', 'cipher.wav',
         '--block-size', blockSize,
-        ...(keyMode === 'image' ? ['--key-image', keyFile?.name ?? 'key.png'] : []),
-        ...(keyMode === 'audio' ? ['--key-audio', keyFile?.name ?? 'key.wav'] : []),
+        ...keyCliArgs(key.options.keyMode, key.options.keyFile),
       )}
       result={
         <ResultPanel
@@ -71,10 +63,9 @@ export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
           idleHint="The encrypted audio appears here as a single WAV that sounds like static."
           note={
             <p className="text-xs text-muted-foreground">
-              Keep this WAV exactly as it is. It, plus the passphrase, is all you need to
-              decrypt. It plays for twice as long as the original, and converting it to
-              MP3 or editing it will destroy the recording. Turn the volume down before
-              playing it.
+              Keep this WAV exactly as it is: it and your key are all you need to decrypt.
+              Converting it to MP3 or editing it destroys the recording. It plays for twice
+              as long as the original, as loud static.
             </p>
           }
           actions={(result) => (
@@ -100,15 +91,7 @@ export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
         sample={SAMPLES.speechClean}
       />
 
-      <KeySelector
-        keyMode={keyMode}
-        onKeyModeChange={setKeyMode}
-        passphrase={passphrase}
-        onPassphraseChange={setPassphrase}
-        keyFile={keyFile}
-        onKeyFileChange={setKeyFile}
-        disabled={isRunning}
-      />
+      <KeySelector {...key.selectorProps} disabled={isRunning} />
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="audio-block-size">Block size</Label>

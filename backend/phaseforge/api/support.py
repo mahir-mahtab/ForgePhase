@@ -22,6 +22,10 @@ from PIL import Image
 from ..io import audio_cipher, audio_io, image_cipher, image_io
 
 MAX_IMAGE_PIXELS = 1024 * 1024
+# Watermarking, filtering and spectra transform at the image's own size, while
+# encryption pads each axis up to a power of two -- up to four times the pixels.
+# The operations that skip padding can afford a larger input.
+MAX_EDIT_PIXELS = 4 * MAX_IMAGE_PIXELS
 MAX_AUDIO_SAMPLES = 48_000 * 60
 MAX_AUDIO_CHANNELS = 2
 
@@ -57,7 +61,7 @@ async def read_upload(upload: UploadFile):
     return data
 
 
-def decode_image(data, greyscale=False):
+def decode_image(data, greyscale=False, max_pixels=MAX_IMAGE_PIXELS):
     """Decode image bytes, rejecting anything too large to transform."""
     try:
         with Image.open(io.BytesIO(data)) as probe:
@@ -67,10 +71,10 @@ def decode_image(data, greyscale=False):
 
     if width < 1 or height < 1:
         raise HTTPException(400, "image has no pixels")
-    if width * height > MAX_IMAGE_PIXELS:
+    if width * height > max_pixels:
         raise HTTPException(
-            413, f"image is {width}x{height}; the limit is {MAX_IMAGE_PIXELS} pixels "
-                 "(transforms pad to a power of two and work in complex128)")
+            413, f"image is {width}x{height} ({width * height:,} pixels); the limit for "
+                 f"this operation is {max_pixels:,} pixels. Resize it and try again.")
 
     try:
         return image_io.load_image(io.BytesIO(data), greyscale=greyscale)
@@ -106,16 +110,27 @@ def resolve_key_material(key_mode: str, passphrase: str | None, key_payload: byt
     elif key_mode == "image":
         if not key_payload:
             raise HTTPException(422, "an image key file is required")
+        _require_lossless_key(image_io.check_key_format, key_payload)
         key_array, _ = decode_image(key_payload)
         return key_array
     elif key_mode == "audio":
         if not key_payload:
             raise HTTPException(422, "an audio key file is required")
+        _require_lossless_key(audio_io.check_key_format, key_payload)
         key_array, _ = decode_audio(key_payload)
         return key_array
     else:
         raise HTTPException(400, f"unsupported key mode: {key_mode!r}")
 
+
+def _require_lossless_key(check, payload):
+    """Reject a key file in a format that may not decode identically elsewhere."""
+    try:
+        check(io.BytesIO(payload))
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+    except Exception:
+        pass  # unreadable: let the regular decoder report it
 
 
 def image_response(array, filename, mode=None):

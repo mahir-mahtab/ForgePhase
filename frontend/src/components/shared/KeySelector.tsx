@@ -1,16 +1,16 @@
-import { memo } from 'react'
+import { memo, useCallback } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
 import { PassphraseField } from '@/components/shared/PassphraseField'
 import { SegmentedControl } from '@/components/shared/SegmentedControl'
 import { Label } from '@/components/ui/label'
-import { ACCEPT_AUDIO, ACCEPT_IMAGE } from '@/lib/accept'
+import { ACCEPT_KEY_AUDIO, ACCEPT_KEY_IMAGE } from '@/lib/accept'
 import type { KeyMode } from '@/services/types'
 
 const KEY_OPTIONS = [
   { value: 'passphrase', label: 'Passphrase' },
-  { value: 'image', label: 'Image Key' },
-  { value: 'audio', label: 'Audio Key' },
+  { value: 'image', label: 'Image file' },
+  { value: 'audio', label: 'Audio file' },
 ] as const
 
 interface KeySelectorProps {
@@ -32,17 +32,27 @@ function KeySelectorImpl({
   keyFile,
   onKeyFileChange,
   disabled = false,
-  label = 'Key source',
+  label = 'Key',
 }: KeySelectorProps) {
+  // Image and audio modes share one file slot, so a file picked in one mode
+  // must not carry over and be sent as the other kind of key.
+  const handleModeChange = useCallback(
+    (mode: KeyMode) => {
+      if (mode !== keyMode) onKeyFileChange(null)
+      onKeyModeChange(mode)
+    },
+    [keyMode, onKeyFileChange, onKeyModeChange],
+  )
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
-        <Label className="text-xs text-muted-foreground">{label}</Label>
+        <Label>{label}</Label>
         <SegmentedControl
           label={label}
           value={keyMode}
           options={KEY_OPTIONS}
-          onChange={onKeyModeChange}
+          onChange={handleModeChange}
           disabled={disabled}
         />
       </div>
@@ -58,9 +68,9 @@ function KeySelectorImpl({
       {keyMode === 'image' && (
         <FileDropzone
           label="Key image"
-          hint="Lossless image (e.g. PNG, TIFF, BMP) whose pixel array derives the phase masks."
+          hint="its pixels are the key; PNG is safest"
           kind="image"
-          accept={ACCEPT_IMAGE}
+          accept={ACCEPT_KEY_IMAGE}
           file={keyFile}
           onFileChange={onKeyFileChange}
           disabled={disabled}
@@ -70,9 +80,9 @@ function KeySelectorImpl({
       {keyMode === 'audio' && (
         <FileDropzone
           label="Key audio"
-          hint="Lossless audio (e.g. WAV, FLAC) whose waveform array derives the phase masks."
+          hint="its samples are the key; lossless only"
           kind="audio"
-          accept={ACCEPT_AUDIO}
+          accept={ACCEPT_KEY_AUDIO}
           file={keyFile}
           onFileChange={onKeyFileChange}
           disabled={disabled}

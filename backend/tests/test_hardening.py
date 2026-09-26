@@ -331,8 +331,8 @@ def test_attack_report_accepts_colour_original_for_greyscale_cipher(client):
     json.loads(response.text)
 
 
-def test_kpa_demo_returns_viewable_images(client):
-    body = client.post("/api/analysis/kpa-demo", json={"size": 32}).json()
+def test_key_reuse_demo_returns_viewable_images(client):
+    body = client.post("/api/analysis/key-reuse-demo", json={"size": 32}).json()
     assert body["correlation"] > 0.999
     for key in ("secret", "ciphertext", "recovered"):
         assert body["images"][key].startswith("data:image/png;base64,")

@@ -27,7 +27,7 @@ export type OperationId =
   | 'denoise'
   | 'enhance'
   | 'attack-report'
-  | 'kpa-demo'
+  | 'key-reuse-demo'
 
 /** Options every operation accepts. */
 export interface BaseOptions {
@@ -65,6 +65,8 @@ export interface WatermarkEmbedRequest extends BaseOptions {
   strength: number
   /** Offset above DC, as a fraction of the image height. */
   position: number
+  /** Keep the mark's colour, one plane per carrier channel. */
+  colour: boolean
 }
 
 export interface WatermarkExtractRequest extends BaseOptions {
@@ -75,6 +77,7 @@ export interface WatermarkExtractRequest extends BaseOptions {
   width: number
   strength: number
   position: number
+  colour: boolean
 }
 
 export interface FilterRequest extends BaseOptions {
@@ -137,7 +140,7 @@ export interface ImageAttackReportRequest extends BaseOptions, KeyOptions {
   original: File
 }
 
-export interface KpaDemoRequest extends BaseOptions {
+export interface KeyReuseDemoRequest extends BaseOptions {
   size: number
 }
 
@@ -179,7 +182,7 @@ export interface RobustnessReport {
   rows: RobustnessRow[]
 }
 
-export interface KpaDemoResult {
+export interface KeyReuseDemoResult {
   size: number
   probesUsed: number
   correlation: number

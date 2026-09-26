@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { cliCommand, quote } from '@/lib/cli'
 import { formatBytes, formatMetric, humanizeKey } from '@/lib/format'
+import { PIXEL_LIMITS, pixelLimitMessage } from '@/lib/limits'
 import { maskGain } from '@/lib/mask'
 import { normalizeReport, parseMetric } from '@/lib/report'
 import { positionRange } from '@/lib/watermark'
@@ -105,5 +106,18 @@ describe('maskGain', () => {
     expect(maskGain(0.3, { ...base, kind: 'low', shape: 'butterworth' })).toBeCloseTo(0.5)
     expect(maskGain(0.31, { ...base, kind: 'high', shape: 'ideal' })).toBe(1)
     expect(maskGain(0.5, { ...base, kind: 'band', shape: 'ideal', highCutoff: 0.6 })).toBe(1)
+  })
+})
+
+describe('pixelLimitMessage', () => {
+  it('accepts an image at the limit', () => {
+    expect(pixelLimitMessage(1024, 1024, PIXEL_LIMITS.encrypt)).toBeNull()
+  })
+
+  it('suggests a same-shape size that fits', () => {
+    const message = pixelLimitMessage(1200, 2133, PIXEL_LIMITS.encrypt)
+    expect(message).toContain('1200 × 2133')
+    const [, width, height] = /to (\d+) × (\d+)/.exec(message ?? '') ?? []
+    expect(Number(width) * Number(height)).toBeLessThanOrEqual(PIXEL_LIMITS.encrypt)
   })
 })

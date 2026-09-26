@@ -44,6 +44,22 @@ def test_extraction_works_on_colour(mark):
     assert metrics.normalized_correlation(mark, recovered) > 0.99
 
 
+def test_colour_mark_keeps_each_channel(mark):
+    rng = np.random.default_rng(1)
+    image = rng.random((3, 128, 128)) * 0.5
+    planes = np.stack([mark, 1.0 - mark, mark.T])
+    marked = watermark.embed(image, planes, strength=0.2)
+    recovered = watermark.extract(image, marked, mark.shape, strength=0.2, colour=True)
+    assert recovered.shape == planes.shape
+    for expected, got in zip(planes, recovered):
+        assert metrics.normalized_correlation(expected, got) > 0.99
+
+
+def test_colour_mark_needs_a_plane_per_channel(image, mark):
+    with pytest.raises(ValueError, match="one plane per image channel"):
+        watermark.embed(image, np.stack([mark] * 3))
+
+
 def test_unmarked_image_yields_no_watermark(image, mark):
     recovered = watermark.extract(image, image, mark.shape, strength=0.15)
     assert abs(metrics.normalized_correlation(mark, recovered)) < 0.2

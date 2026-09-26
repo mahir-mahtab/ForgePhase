@@ -12,6 +12,11 @@ the reconstruction exactly real and makes extraction lossless.
 
 Extraction is non-blind: it compares the watermarked spectrum against the
 original's.
+
+A mark is either greyscale (2D), written identically into every channel and
+averaged back out, or colour (``channels, h, w``), each plane written into its
+own channel of the carrier. Averaging makes a greyscale mark the less noisy of
+the two.
 """
 
 import numpy as np
@@ -130,8 +135,11 @@ def embed(image, watermark, strength=0.15, position=0.25):
     _check_strength(strength)
     image = _as_channel_first(image)
     watermark = np.asarray(watermark, dtype=np.float64)
-    if watermark.ndim != 2:
-        raise ValueError(f"watermark must be 2D, got shape {watermark.shape}")
+    if watermark.ndim == 3 and watermark.shape[0] != image.shape[0]:
+        raise ValueError(f"a colour watermark needs one plane per image channel: "
+                         f"{watermark.shape[0]} planes for {image.shape[0]} channels")
+    if watermark.ndim not in (2, 3):
+        raise ValueError(f"watermark must be 2D or (channels, h, w), got shape {watermark.shape}")
 
     region = block_slice(image.shape, watermark.shape, position)
 
@@ -147,11 +155,14 @@ def embed(image, watermark, strength=0.15, position=0.25):
     return np.real(transform.ifft2(transform.ifftshift(marked, axes=(-2, -1))))
 
 
-def extract(original, watermarked, watermark_shape, strength=0.15, position=0.25):
+def extract(original, watermarked, watermark_shape, strength=0.15, position=0.25,
+            colour=False):
     """Recover the embedded watermark by differencing the two spectra.
 
-    Channels with no spectral energy (an all-black colour plane) cannot carry
-    a mark and are skipped rather than dividing by zero.
+    Returns a 2D mark averaged over channels, or with ``colour`` one plane per
+    channel. Channels with no spectral energy (an all-black colour plane)
+    cannot carry a mark: they are skipped in the average, and left at zero in
+    a colour result.
     """
     _check_strength(strength)
     original = _as_channel_first(original)
@@ -168,5 +179,8 @@ def extract(original, watermarked, watermark_shape, strength=0.15, position=0.25
         raise ValueError("the original image has no spectral energy to carry a watermark")
 
     scale = _scale(original.shape, watermark_shape, strength)
-    difference = (np.abs(marked[usable]) - np.abs(spectrum[usable])) / scale
-    return np.mean(difference[(..., *region)], axis=0)
+    difference = (np.abs(marked) - np.abs(spectrum))[(..., *region)] / scale
+    if colour:
+        difference[~usable] = 0.0
+        return difference
+    return np.mean(difference[usable], axis=0)

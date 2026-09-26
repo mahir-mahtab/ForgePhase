@@ -14,6 +14,24 @@ def load_audio(path):
     return np.ascontiguousarray(data.T), sample_rate
 
 
+# Formats safe to use as a key file: lossy audio decoders can differ between
+# library builds, and the key is a hash of the decoded samples.
+LOSSLESS_FORMATS = frozenset({"WAV", "FLAC", "AIFF"})
+
+
+def check_key_format(path):
+    """Raise ``ValueError`` unless the audio is lossless. Reads the header only."""
+    info = sf.info(path)
+    if info.format not in LOSSLESS_FORMATS:
+        raise ValueError(f"key audio must be WAV, FLAC or AIFF, not {info.format}")
+
+
+def load_key_audio(path):
+    """Load audio to use as key material, refusing lossy formats."""
+    check_key_format(path)
+    return load_audio(path)
+
+
 def save_audio(path, data, sample_rate, subtype="PCM_16", format=None):
     """Write a ``(channels, samples)`` float array.
 
