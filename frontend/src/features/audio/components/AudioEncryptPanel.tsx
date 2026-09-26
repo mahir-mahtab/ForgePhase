@@ -43,7 +43,7 @@ export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
   return (
     <OperationShell
       title="Encrypt audio"
-      description="Cuts the waveform into fixed-size blocks and applies double random phase encoding to each, with a separate mask pair per block and channel, all derived from your key."
+      description="Encrypts the recording block by block from your key."
       runLabel="Encrypt"
       canRun={canRun}
       blockedReason={blockedReason}
@@ -63,9 +63,7 @@ export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
           idleHint="The encrypted audio appears here as a single WAV that sounds like static."
           note={
             <p className="text-xs text-muted-foreground">
-              Keep this WAV exactly as it is: it and your key are all you need to decrypt.
-              Converting it to MP3 or editing it destroys the recording. It plays for twice
-              as long as the original, as loud static.
+              Keep this WAV unedited. Converting or editing it destroys the recording.
             </p>
           }
           actions={(result) => (
@@ -112,8 +110,7 @@ export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          Larger blocks mean fewer transforms; smaller ones limit how much is
-          lost when part of the file is damaged.
+          Smaller blocks limit damage loss; larger ones are faster.
         </p>
       </div>
     </OperationShell>

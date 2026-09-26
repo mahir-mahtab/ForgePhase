@@ -20,8 +20,8 @@ import { positionRange } from '@/lib/watermark'
 import { IMAGE_DEFAULTS, embedWatermark, extractWatermark } from '@/services/imageService'
 
 const STRENGTH_HELP = 'Higher survives more damage but is easier to see.'
-const POSITION_HELP = 'How far above the centre of the spectrum the mark sits, as a fraction of the image height.'
-const COLOUR_HELP = 'Each colour channel carries its own plane of the mark. Slightly noisier, and a greyscale image still gets a grey mark.'
+const POSITION_HELP = 'Distance from the spectrum center, as a fraction of image height.'
+const COLOUR_HELP = 'Mark each color channel. Slightly noisier.'
 
 /** What the embed step hands to the extract step for a one-click check. */
 interface ExtractInputs {
@@ -105,7 +105,7 @@ function EmbedPanel({
   return (
     <OperationShell
       title="Embed a watermark"
-      description="Adds a mark to the magnitude spectrum, mirrored so the result stays a real image. Keep the original: extraction compares against it."
+      description="Embeds a mark in the spectrum. Keep the original for extraction."
       runLabel="Embed"
       canRun={canRun}
       blockedReason={
@@ -260,7 +260,7 @@ function ExtractPanel({
   return (
     <OperationShell
       title="Extract a watermark"
-      description="Compares the spectra of the original and the watermarked image. The watermark size, strength and position must match what was used to embed it."
+      description="Settings must match those used to embed."
       runLabel="Extract"
       canRun={canRun}
       blockedReason={

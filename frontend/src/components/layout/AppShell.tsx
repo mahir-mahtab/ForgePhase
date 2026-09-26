@@ -23,7 +23,7 @@ function Wordmark() {
   return (
     <div className="flex items-center gap-2.5">
       <Logo className="size-9" />
-      <span className="font-display text-2xl leading-none tracking-tight">PhaseForge</span>
+      <span className="font-display font-medium text-2xl leading-none tracking-tight">PhaseForge</span>
     </div>
   )
 }
@@ -49,7 +49,7 @@ function AppShellImpl({
 
   const sidebar = (
     <div className="flex h-full flex-col gap-6 px-4 py-5">
-      <div className="flex items-center justify-between px-2">
+      <div className="flex items-center justify-between border-b border-border px-2 pb-5">
         <Wordmark />
         <Button
           type="button"
@@ -66,9 +66,10 @@ function AppShellImpl({
       <nav aria-label="Tools" className="-mx-1 flex flex-1 flex-col gap-6 overflow-y-auto px-1 [scrollbar-width:thin]">
         {SECTIONS.map((group) => (
           <div key={group.id} className="flex flex-col gap-1">
-            <p className="flex items-center gap-2 px-3 pb-1 text-[0.6875rem] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+            <p className="flex items-center gap-2 px-3 pb-2 text-[0.6875rem] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
               <group.icon className="size-3.5" aria-hidden />
               {group.label}
+              <span aria-hidden className="ml-1 h-px flex-1 bg-border" />
             </p>
             {group.tools.map((tool) => {
               const isActive = group.id === section && tools[group.id] === tool.value
@@ -82,23 +83,26 @@ function AppShellImpl({
                     setDrawerOpen(false)
                   }}
                   className={cn(
-                    'focus-ring group flex items-center gap-3 rounded-full px-3 py-2 text-left text-sm font-medium transition-colors',
+                    'focus-ring group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm font-medium transition-all hover:translate-x-0.5',
                     isActive
-                      ? 'bg-card text-foreground shadow-[0_1px_0_var(--border),0_0_0_1px_var(--border)]'
+                      ? 'bg-card text-foreground shadow-sm ring-1 ring-border'
                       : 'text-muted-foreground hover:bg-sidebar-hover hover:text-foreground',
                   )}
                 >
                   <span
                     className={cn(
-                      'flex size-7 items-center justify-center rounded-full transition-colors',
+                      'flex size-8 items-center justify-center rounded-lg transition-colors group-hover:bg-card',
                       isActive
-                        ? 'bg-highlight text-highlight-foreground'
+                        ? 'bg-highlight text-highlight-foreground group-hover:bg-highlight'
                         : 'text-muted-foreground group-hover:text-foreground',
                     )}
                   >
                     <tool.icon className="size-4" aria-hidden />
                   </span>
                   {tool.label}
+                  {isActive ? (
+                    <span aria-hidden className="ml-auto size-1.5 rounded-full bg-highlight-foreground/60" />
+                  ) : null}
                 </button>
               )
             })}
@@ -106,7 +110,7 @@ function AppShellImpl({
         ))}
       </nav>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3">
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/80 p-3 shadow-sm">
         <div className="flex items-center justify-between gap-2">
           <BackendStatus status={status} />
           <ThemeToggle />
@@ -165,12 +169,7 @@ function AppShellImpl({
         {status.state === 'offline' ? (
           <div role="alert" className="border-b border-border bg-warning-soft">
             <p className="mx-auto max-w-6xl px-4 py-2.5 text-sm text-warning sm:px-8">
-              The PhaseForge API is not reachable. Start it from{' '}
-              <code className="font-mono text-xs">backend/</code> with{' '}
-              <code className="font-mono text-xs">
-                uvicorn phaseforge.api.app:app --port 8000
-              </code>
-              .
+              Backend offline. Run <code className="font-mono text-xs">uvicorn phaseforge.api.app:app --port 8000</code> in <code className="font-mono text-xs">backend/</code>.
             </p>
           </div>
         ) : null}
@@ -181,9 +180,7 @@ function AppShellImpl({
 
         <footer className="border-t border-border">
           <p className="mx-auto max-w-6xl px-4 py-5 text-xs text-muted-foreground sm:px-8">
-            Double random phase encoding is a teaching cipher: it is linear, has no
-            integrity check, and breaks under key reuse. Do not use it to protect real
-            secrets.
+            Educational cipher. Not for protecting real secrets.
           </p>
         </footer>
       </div>

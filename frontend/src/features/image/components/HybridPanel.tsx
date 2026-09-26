@@ -31,10 +31,10 @@ const VIEWS: ReadonlyArray<{ value: HybridView; label: string }> = [
 ]
 
 const VIEW_NOTES: Record<HybridView, string> = {
-  distance: 'The hybrid at full, half, quarter and eighth size, side by side. Shrinking it is what stepping back does.',
-  hybrid: 'The blended image at full size. Look at it close up, then from across the room.',
-  high: 'Only the near image\'s fine detail, the band that wins up close. Lifted to mid-grey so it is visible.',
-  low: 'Only the far image\'s broad shapes, the band that wins from a distance. Fitted to the near image\'s size.',
+  distance: 'Hybrid at four sizes, like stepping back.',
+  hybrid: 'Full-size hybrid.',
+  high: 'Fine detail of the near image.',
+  low: 'Broad shapes of the far image.',
 }
 
 const SHAPES: ReadonlyArray<{ value: FilterShape; label: string }> = [
@@ -67,7 +67,7 @@ export function HybridPanel() {
   return (
     <OperationShell
       title="Hybrid image"
-      description="Keeps only the fine detail of the near image and only the broad shapes of the far one, then adds them. Up close the detail wins; from a distance the eye cannot resolve it and the far image takes over. Line the two up first: eyes over eyes, outline over outline."
+      description="Fine detail of the near image plus broad shapes of the far one."
       runLabel="Blend"
       canRun={canRun}
       blockedReason={
@@ -131,7 +131,7 @@ export function HybridPanel() {
       <div className="flex flex-col gap-1.5">
         <ParamSlider
           label="Near cutoff"
-          description="Detail above this frequency is kept from the near image. Higher keeps only the finest lines."
+          description="Higher keeps only the finest lines."
           value={nearCutoff}
           min={0.02}
           max={0.5}
@@ -141,7 +141,7 @@ export function HybridPanel() {
         />
         <ParamSlider
           label="Far cutoff"
-          description="Shapes below this frequency are kept from the far image. Lower blurs it more."
+          description="Lower blurs the far image more."
           value={farCutoff}
           min={0.005}
           max={0.3}
@@ -159,7 +159,7 @@ export function HybridPanel() {
 
       <ParamSlider
         label="Near gain"
-        description="Strengthens the near image's detail. Raise it if the far image shows through up close."
+        description="Raise if the far image shows up close."
         value={nearGain}
         min={0.25}
         max={3}
@@ -187,13 +187,13 @@ export function HybridPanel() {
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          Gaussian gives the cleanest blend; ideal leaves ripples around edges.
+          Gaussian blends cleanest; ideal leaves ripples.
         </p>
       </div>
 
       <SwitchField
         label="Greyscale"
-        description="Colour in the near image's detail tends to give the trick away."
+        description="Color in the detail can give it away."
         checked={greyscale}
         onCheckedChange={setGreyscale}
         disabled={isRunning}

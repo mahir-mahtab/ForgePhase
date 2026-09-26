@@ -33,7 +33,7 @@ export function AudioRobustnessPanel() {
   return (
     <OperationShell
       title="Robustness report"
-      description="Damages the encrypted audio in several ways (noise, coarse quantization), decrypts each copy with the correct key, and scores the result against the original recording."
+      description="Scores decryption of the damaged audio against the original."
       runLabel="Run report"
       canRun={canRun}
       blockedReason={blockedReason}

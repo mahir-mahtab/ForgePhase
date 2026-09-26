@@ -68,7 +68,7 @@ export function KeyReuseAttackPanel() {
   return (
     <OperationShell
       title="Key-reuse attack"
-      description="DRPE is linear, so an attacker who can encrypt two chosen images under your key (an impulse and a flat image) recovers both masks and decrypts everything else, without ever learning the passphrase."
+      description="Recovers the masks from two chosen images, then decrypts anything."
       runLabel="Run attack"
       canRun
       isRunning={isRunning}
@@ -95,8 +95,7 @@ export function KeyReuseAttackPanel() {
         />
       </div>
       <p className="text-sm text-muted-foreground">
-        This is why each file gets a fresh random salt: the same passphrase
-        never produces the same masks twice.
+        Each file gets a fresh salt, so masks never repeat.
       </p>
     </OperationShell>
   )

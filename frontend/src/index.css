@@ -131,6 +131,12 @@
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
 
+  /* The weight scale sits one step heavier than Tailwind's default. */
+  --font-weight-normal: 500;
+  --font-weight-medium: 600;
+  --font-weight-semibold: 700;
+  --font-weight-bold: 800;
+
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
@@ -157,6 +163,7 @@
     color: var(--foreground);
     font-family: var(--font-sans);
     font-size: 0.9375rem;
+    font-weight: 500;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }

@@ -32,7 +32,7 @@ export function AudioDecryptPanel({ container, onContainerChange }: AudioDecrypt
   return (
     <OperationShell
       title="Decrypt audio"
-      description="Reads the sample rate and block layout stored inside the encrypted WAV, rebuilds the masks from your key, and restores the waveform. There is no checksum: a wrong key gives noise, not an error."
+      description="Restores the waveform from your key. A wrong key gives noise."
       runLabel="Decrypt"
       canRun={canRun}
       blockedReason={blockedReason}

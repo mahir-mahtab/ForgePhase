@@ -13,7 +13,7 @@ export function WorkspaceHeader({ section, tool }: { section: DomainKind; tool: 
         <group.icon className="size-3.5" aria-hidden />
         {group.label} tools
       </p>
-      <h1 className="font-display text-4xl leading-[1.05] tracking-tight sm:text-5xl">
+      <h1 className="font-display font-medium text-4xl leading-[1.05] tracking-tight sm:text-5xl">
         {item.label}
       </h1>
       <p className="max-w-[60ch] text-base text-muted-foreground">{item.description}</p>

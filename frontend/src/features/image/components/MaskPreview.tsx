@@ -35,12 +35,11 @@ function MaskPreviewImpl({ params }: { params: MaskParams }) {
         <FrequencyPlane params={deferred} />
       </div>
       <p className="text-xs text-muted-foreground">
-        Gain over the spectrum with DC at the centre; the strip below plots it
-        from centre to corner. Passes about{' '}
+        Passes about{' '}
         <span className="tabular font-medium text-foreground">
           {(readout.passed * 100).toFixed(0)}%
         </span>{' '}
-        of the spectrum area
+        of the spectrum
         {readout.half === null ? '' : `, half gain at radius ${readout.half.toFixed(2)}`}.
       </p>
     </figure>

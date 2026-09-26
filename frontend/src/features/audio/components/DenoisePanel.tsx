@@ -31,7 +31,7 @@ export function DenoisePanel() {
   return (
     <OperationShell
       title="Remove background noise"
-      description="Tracks the noise spectrum through the whole recording with a speech-presence-probability estimator, then applies the OM-LSA gain: log-spectral amplitude where speech is likely, a bounded floor where it is not. Copes with noise that changes over time and needs no silent lead-in."
+      description="Estimates and suppresses background noise."
       runLabel="Denoise"
       canRun={file !== null}
       blockedReason="Choose an audio file."
@@ -70,7 +70,7 @@ export function DenoisePanel() {
       />
       <ParamSlider
         label="Max reduction"
-        description="The most a noise-only bin is turned down. Higher is quieter between words; past about 30 dB the background can sound gated."
+        description="Maximum noise reduction. Very high can sound gated."
         value={reductionDb}
         min={3}
         max={40}
@@ -81,7 +81,7 @@ export function DenoisePanel() {
       />
       <ParamSlider
         label="Smoothing"
-        description="Weight of the decision-directed SNR estimate. Higher leaves a steadier, less warbly residual but softens consonant onsets."
+        description="Higher is steadier but softens consonants."
         value={smoothing}
         min={0.8}
         max={0.995}
@@ -91,7 +91,7 @@ export function DenoisePanel() {
       />
       <ParamSlider
         label="Noise seed"
-        description="Frames from the start that seed the noise tracker, which then follows the noise on its own; each covers 1024 samples."
+        description="Initial frames used to estimate noise."
         value={noiseFrames}
         min={1}
         max={30}

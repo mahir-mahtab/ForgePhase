@@ -40,7 +40,7 @@ export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
   return (
     <OperationShell
       title="Encrypt an image"
-      description="Multiplies the image by a random phase mask, transforms it, and multiplies by a second mask in the frequency domain. Both masks are derived from your key."
+      description="Encrypts the image using masks derived from your key."
       runLabel="Encrypt"
       canRun={canRun}
       blockedReason={blockedReason}
@@ -60,8 +60,7 @@ export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
           idleHint="The encrypted image appears here as a single noisy picture."
           note={
             <p className="text-xs text-muted-foreground">
-              Keep this PNG exactly as it is: it and your key are all you need to decrypt.
-              Re-saving it as JPEG or resizing it destroys the image.
+              Keep this PNG unedited. Re-saving or resizing destroys it.
             </p>
           }
           actions={(result) => (
@@ -92,7 +91,7 @@ export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
 
       <SwitchField
         label="Convert to greyscale"
-        description="One channel instead of three: faster, with smaller output."
+        description="Grayscale: faster, smaller output."
         checked={greyscale}
         onCheckedChange={setGreyscale}
         disabled={isRunning}

@@ -33,7 +33,7 @@ export function EnhancePanel() {
   return (
     <OperationShell
       title="Enhance speech"
-      description="Two-step noise reduction (TSNR) removes the one-frame lag that blurs onsets, then harmonic regeneration rebuilds pitch harmonics the suppression erased. A lift of the 300–3400 Hz band adds clarity, and levelling brings the voice to a steady loudness."
+      description="Reduces noise, restores harmonics, then equalizes and levels."
       runLabel="Enhance"
       canRun={file !== null}
       blockedReason="Choose an audio file."
@@ -73,7 +73,7 @@ export function EnhancePanel() {
       />
       <ParamSlider
         label="Noise reduction"
-        description="The most a noise-only bin is turned down. 0 skips noise reduction and only equalizes and levels."
+        description="Maximum noise reduction. 0 skips it."
         value={reductionDb}
         min={0}
         max={30}
@@ -84,7 +84,7 @@ export function EnhancePanel() {
       />
       <ParamSlider
         label="Harmonic regeneration"
-        description="How much the rebuilt harmonic comb steers the gain. 0 is plain two-step reduction; higher keeps voiced sounds fuller."
+        description="Higher keeps voiced sounds fuller."
         value={harmonics}
         min={0}
         max={1}
@@ -94,7 +94,7 @@ export function EnhancePanel() {
       />
       <ParamSlider
         label="Clarity"
-        description="Lift of the speech band. Above about 8 dB voices start to sound thin."
+        description="Speech-band boost. Above 8 dB sounds thin."
         value={clarityDb}
         min={0}
         max={12}
@@ -105,7 +105,7 @@ export function EnhancePanel() {
       />
       <SwitchField
         label="Level loudness"
-        description="Bring active speech to −20 dBFS, backing off if that would clip."
+        description="Level speech to −20 dBFS."
         checked={normalize}
         onCheckedChange={setNormalize}
         disabled={isRunning}

@@ -31,15 +31,15 @@ const KINDS: ReadonlyArray<{ value: FilterKind; label: string }> = [
 ]
 
 const KIND_NOTES: Record<FilterKind, string> = {
-  low: 'Keeps broad shapes and removes fine detail, like a blur.',
-  high: 'Keeps edges and texture and removes smooth areas.',
-  band: 'Keeps one ring of frequencies between the two cutoffs.',
+  low: 'Keeps broad shapes, like a blur.',
+  high: 'Keeps edges and texture.',
+  band: 'Keeps frequencies between the cutoffs.',
 }
 
 const SHAPES: ReadonlyArray<{ value: FilterShape; label: string; note: string }> = [
-  { value: 'gaussian', label: 'Gaussian', note: 'Smooth roll-off, no ringing.' },
+  { value: 'gaussian', label: 'Gaussian', note: 'Smooth, no ringing.' },
   { value: 'butterworth', label: 'Butterworth', note: 'Steepness set by the order.' },
-  { value: 'ideal', label: 'Ideal', note: 'Hard cut; causes visible ringing.' },
+  { value: 'ideal', label: 'Ideal', note: 'Hard cut; visible ringing.' },
 ]
 
 export function FilterPanel() {
@@ -77,7 +77,7 @@ export function FilterPanel() {
   return (
     <OperationShell
       title="Frequency filter"
-      description="Applies a radial gain mask to the image's spectrum and transforms back. Cutoffs are fractions of the highest frequency, so they work at any image size."
+      description="Cutoffs are fractions of the maximum frequency."
       runLabel="Apply filter"
       canRun={canRun}
       blockedReason={
@@ -132,7 +132,7 @@ export function FilterPanel() {
 
       <ParamSlider
         label={isBand ? 'Lower cutoff' : 'Cutoff'}
-        description="0 is the centre of the spectrum (DC), 1 its edge."
+        description="0 is the center, 1 the edge."
         value={cutoff}
         min={0.02}
         max={1.4}
@@ -184,7 +184,7 @@ export function FilterPanel() {
       {filterShape === 'butterworth' ? (
         <ParamSlider
           label="Order"
-          description="Higher is steeper, approaching the ideal mask."
+          description="Higher is steeper."
           value={order}
           min={1}
           max={10}

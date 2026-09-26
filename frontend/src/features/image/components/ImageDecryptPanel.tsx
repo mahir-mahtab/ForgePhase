@@ -35,7 +35,7 @@ export function ImageDecryptPanel({
   return (
     <OperationShell
       title="Decrypt an image"
-      description="Rebuilds both masks from your key and reverses the transform. There is no checksum: a wrong key gives noise, not an error."
+      description="Restores the image from your key. A wrong key gives noise."
       runLabel="Decrypt"
       canRun={canRun}
       blockedReason={blockedReason}

@@ -15,7 +15,7 @@ const API_BASE_URL: string = (
 ).replace(/\/$/, '')
 
 const UNREACHABLE =
-  'Could not reach the PhaseForge backend. Start it on port 8000 (see the banner above) and try again.'
+  'Backend unreachable. Start it and try again.'
 
 /** FastAPI reports validation failures as a list of `{loc, msg}` objects. */
 function describeDetail(detail: unknown): string | null {

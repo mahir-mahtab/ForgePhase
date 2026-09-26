@@ -42,7 +42,7 @@ function OperationShellImpl({
   return (
     <Card>
       <div className="border-b border-border px-6 py-5">
-        <h3 className="font-display text-2xl leading-tight">{title}</h3>
+        <h3 className="font-display font-medium text-2xl leading-tight">{title}</h3>
         <p className="mt-1 max-w-[75ch] text-sm text-muted-foreground">{description}</p>
       </div>
 

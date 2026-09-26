@@ -33,7 +33,7 @@ export function ImageRobustnessPanel() {
   return (
     <OperationShell
       title="Robustness report"
-      description="Damages the encrypted image in several ways (noise, a missing block, coarse quantization), decrypts each copy with the correct key, and scores the result against the original."
+      description="Scores decryption of the damaged image against the original."
       runLabel="Run report"
       canRun={canRun}
       blockedReason={blockedReason}
