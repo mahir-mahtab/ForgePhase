@@ -138,23 +138,6 @@ def test_container_kind_is_enforced(client, image, signal):
     assert "cipher WAV" in response.json()["detail"]
 
 
-def test_spectrum_of_image(client, image):
-    response = client.post("/api/image/spectrum",
-                           files={"file": ("in.png", png_bytes(image), "image/png")})
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "image/png"
-
-
-def test_spectrum_of_ciphertext_is_noise(client, image):
-    encrypted = client.post("/api/image/encrypt",
-                            files={"file": ("in.png", png_bytes(image), "image/png")},
-                            data={"passphrase": PASSPHRASE})
-    response = client.post("/api/image/spectrum",
-                           files={"file": ("cipher.png", encrypted.content)})
-    assert response.status_code == 200
-    assert abs(metrics.normalized_correlation(image, read_png(response.content))) < 0.2
-
-
 @pytest.mark.parametrize("kind", ["low", "high"])
 def test_filter(client, image, kind):
     response = client.post("/api/image/filter",
@@ -266,7 +249,7 @@ def test_denoise_and_enhance(client):
 def test_denoise_rejects_bad_parameters(client, signal):
     response = client.post("/api/audio/denoise",
                            files={"file": ("in.wav", wav_bytes(signal), "audio/wav")},
-                           data={"over_subtraction": 0.1})
+                           data={"reduction_db": 0})
     assert response.status_code == 400
 
 
@@ -322,12 +305,12 @@ def test_key_reuse_demo_rejects_out_of_range_size(client):
 
 
 def test_empty_upload_rejected(client):
-    response = client.post("/api/image/spectrum", files={"file": ("empty.png", b"")})
+    response = client.post("/api/image/filter", files={"file": ("empty.png", b"")})
     assert response.status_code == 400
 
 
 def test_non_image_upload_rejected(client):
-    response = client.post("/api/image/spectrum",
+    response = client.post("/api/image/filter",
                            files={"file": ("notes.txt", b"this is not an image")})
     assert response.status_code == 400
     assert "image" in response.json()["detail"]
@@ -343,14 +326,14 @@ def test_oversized_image_rejected_for_encryption(client):
 
 
 def test_operations_without_padding_take_larger_images(client):
-    # Over the encryption limit, but spectra are not padded to a power of two.
+    # Over the encryption limit, but filtering does not pad to a power of two.
     tall = np.zeros((1, 2133, 1200))
-    response = client.post("/api/image/spectrum",
+    response = client.post("/api/image/filter",
                            files={"file": ("tall.png", png_bytes(tall), "image/png")})
     assert response.status_code == 200
 
     huge = np.zeros((1, 2100, 2100))
-    response = client.post("/api/image/spectrum",
+    response = client.post("/api/image/filter",
                            files={"file": ("huge.png", png_bytes(huge), "image/png")})
     assert response.status_code == 413
 
@@ -386,7 +369,7 @@ def test_passphrase_is_required(client, image):
 
 
 def test_cors_headers_present(client, image):
-    response = client.post("/api/image/spectrum",
+    response = client.post("/api/image/filter",
                            files={"file": ("in.png", png_bytes(image), "image/png")},
                            headers={"Origin": "http://localhost:5173"})
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
@@ -463,3 +446,27 @@ def test_jpeg_image_key_round_trips(client, image):
     assert dec.status_code == 200
     recovered, _ = image_io.load_image(io.BytesIO(dec.content))
     assert np.allclose(recovered, image, atol=1e-2)
+
+
+@pytest.mark.parametrize("view", ["hybrid", "distance", "low", "high"])
+def test_hybrid_views(client, image, view):
+    response = client.post(
+        "/api/image/hybrid",
+        files={"near": ("near.png", png_bytes(image)), "far": ("far.png", png_bytes(image[::-1]))},
+        data={"view": view},
+    )
+    assert response.status_code == 200, response.text
+    result = read_png(response.content)
+    if view == "distance":
+        assert result.shape[-1] > image.shape[-1]
+    else:
+        assert result.shape == image.shape
+
+
+def test_hybrid_rejects_unknown_view(client, image):
+    response = client.post(
+        "/api/image/hybrid",
+        files={"near": ("near.png", png_bytes(image)), "far": ("far.png", png_bytes(image))},
+        data={"view": "sideways"},
+    )
+    assert response.status_code == 400

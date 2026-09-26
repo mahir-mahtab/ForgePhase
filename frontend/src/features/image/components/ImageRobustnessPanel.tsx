@@ -9,6 +9,7 @@ import { useKeyInput } from '@/hooks/useKeyInput'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_IMAGE, ACCEPT_PNG } from '@/lib/accept'
 import { cliCommand, keyCliArgs } from '@/lib/cli'
+import { SAMPLES } from '@/lib/samples'
 import { imageRobustnessReport } from '@/services/imageService'
 
 export function ImageRobustnessPanel() {
@@ -61,6 +62,8 @@ export function ImageRobustnessPanel() {
         file={cipherFile}
         onFileChange={setCipherFile}
         disabled={isRunning}
+        sample={SAMPLES.imageAnalysisCipher}
+        onSampleLoaded={key.applySampleKey}
       />
       <FileDropzone
         label="Original image"
@@ -70,6 +73,7 @@ export function ImageRobustnessPanel() {
         file={original}
         onFileChange={setOriginal}
         disabled={isRunning}
+        sample={SAMPLES.imageAnalysisOriginal}
       />
       <KeySelector {...key.selectorProps} disabled={isRunning} />
     </OperationShell>

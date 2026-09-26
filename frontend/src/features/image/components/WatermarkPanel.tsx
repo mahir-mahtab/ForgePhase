@@ -161,7 +161,7 @@ function EmbedPanel({
         file={input}
         onFileChange={setInput}
         disabled={isRunning}
-        sample={SAMPLES.image}
+        sample={SAMPLES.watermarkImage}
         error={sizeError}
       />
       <FileDropzone
@@ -172,7 +172,7 @@ function EmbedPanel({
         file={watermark}
         onFileChange={setWatermark}
         disabled={isRunning}
-        sample={SAMPLES.watermark}
+        sample={SAMPLES.watermarkMark}
       />
       <ParamSlider
         label="Strength"
@@ -296,6 +296,7 @@ function ExtractPanel({
           file={original}
           onFileChange={inputs.setOriginal}
           disabled={isRunning}
+          sample={SAMPLES.watermarkOriginal}
         />
         <FileDropzone
           label="Watermarked image"
@@ -304,6 +305,7 @@ function ExtractPanel({
           file={marked}
           onFileChange={inputs.setMarked}
           disabled={isRunning}
+          sample={SAMPLES.watermarkMarked}
         />
       </div>
 

@@ -1,4 +1,4 @@
-"""Frequency-domain image filtering and spectrum rendering."""
+"""Frequency-domain image filtering."""
 
 import numpy as np
 import pytest
@@ -64,21 +64,3 @@ def test_unknown_filter_shape_rejected(stripes):
     with pytest.raises(ValueError, match="filter_shape must be"):
         freq_edit.apply_filter(stripes, "low", filter_shape="triangular")
 
-
-def test_spectrum_preview_is_display_ready(stripes):
-    preview = freq_edit.spectrum_preview(stripes)
-    assert preview.shape == stripes.shape
-    assert preview.min() >= 0.0 and preview.max() <= 1.0
-
-
-def test_spectrum_preview_accepts_complex_ciphertext():
-    rng = np.random.default_rng(0)
-    cipher = rng.normal(size=(1, 32, 32)) + 1j * rng.normal(size=(1, 32, 32))
-    preview = freq_edit.spectrum_preview(cipher)
-    assert preview.shape == cipher.shape
-    assert np.isrealobj(preview)
-
-
-def test_spectrum_preview_handles_blank_input():
-    preview = freq_edit.spectrum_preview(np.zeros((1, 16, 16)))
-    assert np.all(preview == 0.0)

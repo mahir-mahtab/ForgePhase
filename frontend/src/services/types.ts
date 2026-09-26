@@ -21,7 +21,7 @@ export type OperationId =
   | 'watermark-embed'
   | 'watermark-extract'
   | 'filter'
-  | 'spectrum'
+  | 'hybrid'
   | 'audio-encrypt'
   | 'audio-decrypt'
   | 'denoise'
@@ -92,11 +92,23 @@ export interface FilterRequest extends BaseOptions {
   order: number
 }
 
-export interface SpectrumRequest extends BaseOptions {
-  /** An ordinary image or a cipher PNG; the backend tells them apart. */
-  input: File
-  /** Display gamma applied to the log-scaled magnitude. */
-  gamma: number
+/** What `/api/image/hybrid` sends back; the CLI writes `hybrid` and, with `--distance`, `distance`. */
+export type HybridView = 'hybrid' | 'distance' | 'low' | 'high'
+
+export interface HybridRequest extends BaseOptions {
+  /** Seen up close: only its fine detail is kept. */
+  near: File
+  /** Seen from a distance: only its broad shapes are kept. Fitted to `near`'s size. */
+  far: File
+  /** High-pass cutoff for `near`, as a fraction of Nyquist. */
+  nearCutoff: number
+  /** Low-pass cutoff for `far`; keep it below `nearCutoff`. */
+  farCutoff: number
+  /** Gain on the near image's detail. */
+  nearGain: number
+  filterShape: FilterShape
+  greyscale: boolean
+  view: HybridView
 }
 
 export interface AudioEncryptRequest extends BaseOptions, KeyOptions {
@@ -112,22 +124,24 @@ export interface AudioDecryptRequest extends BaseOptions, KeyOptions {
 
 export interface DenoiseRequest extends BaseOptions {
   input: File
-  /** Spectral subtraction factor. Higher removes more, at the cost of musical noise. */
-  overSubtraction: number
-  /** Fraction of the original magnitude that is always kept. */
-  floor: number
-  /** Opening frames assumed to be noise only. */
+  /** OM-LSA gain floor: the most a noise-only bin is turned down, in dB. */
+  reductionDb: number
+  /** Decision-directed SNR smoothing in [0, 1). Higher is steadier, with softer onsets. */
+  smoothing: number
+  /** Opening frames that seed the noise tracker. */
   noiseFrames: number
 }
 
 export interface EnhanceRequest extends BaseOptions {
   input: File
-  /** Gain applied to the speech band. */
-  boost: number
-  /** Gate threshold, as a multiple of each frame's median magnitude. */
-  gateThreshold: number
-  /** Gain applied to gated bins. */
-  gateFloor: number
+  /** Most a noise-only bin is turned down, in dB; 0 turns noise reduction off. */
+  reductionDb: number
+  /** Weight of the regenerated harmonic spectrum, 0 to 1. */
+  harmonics: number
+  /** Lift of the 300-3400 Hz speech band, in dB. */
+  clarityDb: number
+  /** Level the active speech to a fixed loudness. */
+  normalize: boolean
 }
 
 export interface AudioAttackReportRequest extends BaseOptions, KeyOptions {

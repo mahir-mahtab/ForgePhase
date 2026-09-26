@@ -51,6 +51,10 @@
   --success: #1f7a4d;
   --warning: #8a5a00;
   --warning-soft: #fff1c7;
+
+  /* Chart series, fixed order: input then output. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
 }
 
 .dark {
@@ -91,6 +95,9 @@
   --success: #4ade80;
   --warning: #f5c451;
   --warning-soft: #2a2208;
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
 }
 
 @theme inline {

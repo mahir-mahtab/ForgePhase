@@ -88,7 +88,7 @@ export function AudioEncryptPanel({ onOpenInDecrypt }: AudioEncryptPanelProps) {
         file={file}
         onFileChange={setFile}
         disabled={isRunning}
-        sample={SAMPLES.speechClean}
+        sample={SAMPLES.audioEncrypt}
       />
 
       <KeySelector {...key.selectorProps} disabled={isRunning} />

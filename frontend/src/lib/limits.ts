@@ -7,7 +7,7 @@
 export const PIXEL_LIMITS = {
   /** Encryption pads each axis to a power of two, so it takes the least. */
   encrypt: 1024 * 1024,
-  /** Watermark, filter and spectrum work at the image's own size. */
+  /** Watermark, filter and hybrid work at the image's own size. */
   edit: 4 * 1024 * 1024,
 } as const
 

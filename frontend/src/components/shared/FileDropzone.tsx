@@ -19,6 +19,8 @@ interface FileDropzoneProps {
   disabled?: boolean
   /** Offers a one-click demo file. */
   sample?: Sample
+  /** Called after the sample loads, e.g. to fill in its passphrase. */
+  onSampleLoaded?: (sample: Sample) => void
   /** Why the chosen file cannot be used, shown under it. */
   error?: string | null
 }
@@ -38,6 +40,7 @@ function FileDropzoneImpl({
   onFileChange,
   disabled = false,
   sample,
+  onSampleLoaded,
   error,
 }: FileDropzoneProps) {
   const inputId = useId()
@@ -80,10 +83,11 @@ function FileDropzoneImpl({
     setSampleError(null)
     try {
       onFileChange(await loadSample(sample))
+      onSampleLoaded?.(sample)
     } catch (error) {
       setSampleError(error instanceof Error ? error.message : 'Could not load the sample.')
     }
-  }, [onFileChange, sample])
+  }, [onFileChange, onSampleLoaded, sample])
 
   return (
     <div className="flex flex-col gap-1.5">

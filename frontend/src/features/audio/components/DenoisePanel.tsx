@@ -4,6 +4,7 @@ import { FileDropzone } from '@/components/shared/FileDropzone'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { ParamSlider } from '@/components/shared/ParamSlider'
 import { ResultPanel } from '@/components/shared/ResultPanel'
+import { SpectrumCompare } from '@/components/shared/SpectrumCompare'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_AUDIO } from '@/lib/accept'
 import { cliCommand } from '@/lib/cli'
@@ -12,22 +13,25 @@ import { AUDIO_DEFAULTS, denoiseAudio } from '@/services/audioService'
 
 export function DenoisePanel() {
   const [file, setFile] = useState<File | null>(null)
-  const [overSubtraction, setOverSubtraction] = useState<number>(AUDIO_DEFAULTS.overSubtraction)
-  const [floor, setFloor] = useState<number>(AUDIO_DEFAULTS.floor)
+  const [reductionDb, setReductionDb] = useState<number>(AUDIO_DEFAULTS.denoiseReductionDb)
+  const [smoothing, setSmoothing] = useState<number>(AUDIO_DEFAULTS.smoothing)
   const [noiseFrames, setNoiseFrames] = useState<number>(AUDIO_DEFAULTS.noiseFrames)
+  // The file the shown result came from, so picking a new one does not skew the comparison.
+  const [source, setSource] = useState<File | null>(null)
   const { state, execute, reset } = useOperation(denoiseAudio)
 
   const isRunning = state.phase === 'running'
 
   const handleRun = useCallback(() => {
     if (!file) return
-    void execute({ input: file, overSubtraction, floor, noiseFrames })
-  }, [execute, file, floor, noiseFrames, overSubtraction])
+    setSource(file)
+    void execute({ input: file, reductionDb, smoothing, noiseFrames })
+  }, [execute, file, noiseFrames, reductionDb, smoothing])
 
   return (
     <OperationShell
       title="Remove background noise"
-      description="Learns the noise from the start of the recording, then subtracts it from every frame's spectrum. Works best on steady noise (hiss, hum, fans) with a moment of silence at the start."
+      description="Tracks the noise spectrum through the whole recording with a speech-presence-probability estimator, then applies the OM-LSA gain: log-spectral amplitude where speech is likely, a bounded floor where it is not. Copes with noise that changes over time and needs no silent lead-in."
       runLabel="Denoise"
       canRun={file !== null}
       blockedReason="Choose an audio file."
@@ -37,12 +41,21 @@ export function DenoisePanel() {
       onReset={reset}
       command={cliCommand(
         'phaseforge', 'denoise', file?.name ?? 'noisy.wav', 'denoised.wav',
-        '--over-subtraction', overSubtraction, '--floor', floor, '--noise-frames', noiseFrames,
+        '--reduction-db', reductionDb, '--smoothing', smoothing, '--noise-frames', noiseFrames,
       )}
       result={
         <ResultPanel
           state={state}
-          idleHint="The cleaned audio appears here. Compare it with the input player on the left."
+          idleHint="The cleaned audio appears here, with spectrograms and the average spectrum before and after."
+          note={
+            state.phase === 'ok' && source ? (
+              <SpectrumCompare
+                input={source}
+                output={state.data.artifact.file}
+                outputLabel="Denoised"
+              />
+            ) : null
+          }
         />
       }
     >
@@ -53,31 +66,32 @@ export function DenoisePanel() {
         file={file}
         onFileChange={setFile}
         disabled={isRunning}
-        sample={SAMPLES.speechNoisy}
+        sample={SAMPLES.denoise}
       />
       <ParamSlider
-        label="Strength"
-        description="How much of the estimated noise to remove. Above about 3 the remainder can sound watery."
-        value={overSubtraction}
-        min={1}
-        max={5}
-        step={0.1}
+        label="Max reduction"
+        description="The most a noise-only bin is turned down. Higher is quieter between words; past about 30 dB the background can sound gated."
+        value={reductionDb}
+        min={3}
+        max={40}
+        step={1}
+        unit="dB"
         disabled={isRunning}
-        onChange={setOverSubtraction}
+        onChange={setReductionDb}
       />
       <ParamSlider
-        label="Floor"
-        description="Fraction of the original always kept. Higher sounds smoother but removes less."
-        value={floor}
-        min={0}
-        max={0.5}
-        step={0.01}
+        label="Smoothing"
+        description="Weight of the decision-directed SNR estimate. Higher leaves a steadier, less warbly residual but softens consonant onsets."
+        value={smoothing}
+        min={0.8}
+        max={0.995}
+        step={0.005}
         disabled={isRunning}
-        onChange={setFloor}
+        onChange={setSmoothing}
       />
       <ParamSlider
-        label="Noise sample length"
-        description="Frames from the start used to learn the noise; each covers 1024 samples."
+        label="Noise seed"
+        description="Frames from the start that seed the noise tracker, which then follows the noise on its own; each covers 1024 samples."
         value={noiseFrames}
         min={1}
         max={30}

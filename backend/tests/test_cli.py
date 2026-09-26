@@ -100,23 +100,6 @@ def test_band_pass_runs(tmp_path, image_file):
     assert output.exists()
 
 
-def test_spectrum_of_image(tmp_path, image_file):
-    output = tmp_path / "spectrum.png"
-    run("spectrum", image_file, output)
-    assert output.exists()
-
-
-def test_spectrum_of_ciphertext_looks_like_noise(tmp_path, image_file):
-    cipher = tmp_path / "cipher.png"
-    preview = tmp_path / "preview.png"
-    run("image-encrypt", image_file, cipher, "--passphrase", PASSPHRASE)
-    run("spectrum", cipher, preview)
-
-    original, _ = image_io.load_image(image_file)
-    rendered, _ = image_io.load_image(preview)
-    assert abs(metrics.normalized_correlation(original, rendered)) < 0.2
-
-
 def test_denoise_and_enhance(tmp_path, audio_file):
     denoised = tmp_path / "denoised.wav"
     enhanced = tmp_path / "enhanced.wav"

@@ -19,12 +19,12 @@ plus a React app in `frontend/` that covers every command.
 | Image | Decrypt | Restores the image from `cipher.png` and the key |
 | Image | Watermark | Hides a mark (greyscale or colour) in the magnitude spectrum, and extracts it again |
 | Image | Filter | Low-, high- or band-pass with Gaussian, Butterworth or ideal masks, with a live mask preview |
-| Image | Spectrum | Log-scaled magnitude spectrum of an image or of a cipher PNG |
+| Image | Hybrid | Blends two images into one that reads as the first up close and the second from a distance |
 | Image | Analysis | Robustness report, and the key-reuse attack demo |
 | Audio | Encrypt | Block-by-block DRPE into one `cipher.wav` that plays as static |
 | Audio | Decrypt | Restores the recording from `cipher.wav` and the key |
-| Audio | Denoise | Spectral subtraction, learning the noise from the opening frames |
-| Audio | Enhance | Speech-band boost plus a spectral noise gate |
+| Audio | Denoise | OM-LSA suppression with speech-presence-probability noise tracking (no silent lead-in needed); before/after spectrograms |
+| Audio | Enhance | Two-step noise reduction with harmonic regeneration, speech-band clarity EQ and loudness levelling; before/after spectrograms |
 | Audio | Analysis | Robustness report for an encrypted recording |
 
 **Keys.** Anything that encrypts, decrypts or analyses a cipher takes a
@@ -35,7 +35,7 @@ PBKDF2 (200,000 iterations) and a fresh random salt per file, so the same
 passphrase never produces the same masks twice.
 
 **Size limits.** Encryption pads each side up to a power of two, so it accepts
-images up to 1 megapixel (1024 × 1024). Watermark, Filter and Spectrum work at
+images up to 1 megapixel (1024 × 1024). Watermark, Filter and Hybrid work at
 the image's own size and accept up to 4 megapixels. The app flags an
 oversized image, with a size that fits, before uploading it. Audio is limited
 to 2,880,000 samples per channel (60 seconds at 48 kHz) and two channels.
@@ -75,8 +75,8 @@ npm run dev
 ```
 
 Open http://localhost:5173. The dev server proxies `/api` to the backend, and
-the sidebar shows whether the API is reachable. Inputs with a matching demo
-file offer **Use sample**.
+the sidebar shows whether the API is reachable. Every input has a demo file
+behind **Use sample**; loading a sample cipher also fills in its passphrase.
 
 ## Using it
 
@@ -92,6 +92,12 @@ size, strength, position and colour setting. Extraction compares against the
 original image, so keep it. Transparent areas of a mark count as white. A
 colour watermark keeps the mark's colours on a colour image, at the cost of
 some coloured speckle; on a greyscale image it falls back to grey.
+
+**Hybrid.** Give it two aligned images: the near one keeps only its fine
+detail, the far one only its broad shapes. **Near to far** shows the result at
+full, half, quarter and eighth size, which is what stepping back does. Keep
+the far cutoff well below the near one, and line the faces up first; the
+filtering cannot fix misaligned eyes.
 
 **Analysis.** The robustness report damages a cipher (noise, a missing block,
 coarse quantization), decrypts each copy with the correct key and scores the
@@ -150,9 +156,9 @@ backend/
 │   ├── io/           Image and audio files, cipher PNG/WAV containers
 │   ├── api/          FastAPI app and routers
 │   └── cli.py        The phaseforge command
-├── samples/          Demo inputs and the script that makes them
 └── tests/
 frontend/             React app; see frontend/README.md
+samples/              Inputs and results for every operation; see samples/README.md
 ```
 
 ### Troubleshooting

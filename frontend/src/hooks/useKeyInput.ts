@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 
+import type { Sample } from '@/lib/samples'
 import type { KeyMode, KeyOptions } from '@/services/types'
 
 /**
@@ -21,6 +22,13 @@ export function useKeyInput() {
       /** Why the run is blocked when `hasKey` is false. */
       missingReason: keyMode === 'passphrase' ? 'Enter the passphrase.' : `Choose the key ${keyMode}.`,
       options: { keyMode, passphrase, keyFile } satisfies KeyOptions,
+      /** Pass to a cipher dropzone's `onSampleLoaded` to fill in the sample's key. */
+      applySampleKey: (sample: Sample) => {
+        if (!sample.passphrase) return
+        setKeyMode('passphrase')
+        setKeyFile(null)
+        setPassphrase(sample.passphrase)
+      },
       selectorProps: {
         keyMode,
         onKeyModeChange: setKeyMode,

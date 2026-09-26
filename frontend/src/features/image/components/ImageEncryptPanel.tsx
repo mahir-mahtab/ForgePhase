@@ -84,7 +84,7 @@ export function ImageEncryptPanel({ onOpenInDecrypt }: ImageEncryptPanelProps) {
         file={file}
         onFileChange={setFile}
         disabled={isRunning}
-        sample={SAMPLES.image}
+        sample={SAMPLES.imageEncrypt}
         error={sizeError}
       />
 

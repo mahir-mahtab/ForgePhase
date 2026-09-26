@@ -55,19 +55,21 @@ async def decrypt(file: UploadFile = File(...),
 
 
 @router.post("/denoise")
-async def denoise_audio(file: UploadFile = File(...), over_subtraction: float = Form(2.0),
-                        floor: float = Form(0.05), noise_frames: int = Form(6)):
-    """Reduce background noise by spectral subtraction.
+async def denoise_audio(file: UploadFile = File(...),
+                        reduction_db: float = Form(denoise.DEFAULT_REDUCTION_DB),
+                        smoothing: float = Form(denoise.DEFAULT_SMOOTHING),
+                        noise_frames: int = Form(denoise.DEFAULT_NOISE_FRAMES)):
+    """Suppress background noise with the OM-LSA estimator.
 
-    The noise profile is estimated from the opening frames, so the recording
-    needs a short noise-only lead-in for this to work well.
+    The noise is tracked through the whole recording; the opening frames
+    only seed the estimate.
     """
     payload = await support.read_upload(file)
 
     def work():
         signal, sample_rate = support.decode_audio(payload)
         cleaned = denoise.denoise_multichannel(
-            signal, over_subtraction=over_subtraction, floor=floor,
+            signal, reduction_db=reduction_db, smoothing=smoothing,
             noise_frames=noise_frames)
         support.ensure_finite(cleaned, "denoised audio")
         return support.audio_response(cleaned, sample_rate, "denoised.wav")
@@ -76,16 +78,19 @@ async def denoise_audio(file: UploadFile = File(...), over_subtraction: float = 
 
 
 @router.post("/enhance")
-async def enhance_audio(file: UploadFile = File(...), boost: float = Form(2.0),
-                        gate_threshold: float = Form(1.5), gate_floor: float = Form(0.1)):
-    """Boost the speech band and gate low-energy bins."""
+async def enhance_audio(file: UploadFile = File(...),
+                        reduction_db: float = Form(enhance.DEFAULT_REDUCTION_DB),
+                        harmonics: float = Form(enhance.DEFAULT_HARMONICS),
+                        clarity_db: float = Form(enhance.DEFAULT_CLARITY_DB),
+                        normalize: bool = Form(True)):
+    """Two-step noise reduction with harmonic regeneration, clarity EQ and levelling."""
     payload = await support.read_upload(file)
 
     def work():
         signal, sample_rate = support.decode_audio(payload)
         enhanced = enhance.enhance_multichannel(
-            signal, sample_rate, boost=boost, gate_threshold=gate_threshold,
-            gate_floor=gate_floor)
+            signal, sample_rate, reduction_db=reduction_db, harmonics=harmonics,
+            clarity_db=clarity_db, normalize=normalize)
         support.ensure_finite(enhanced, "enhanced audio")
         return support.audio_response(enhanced, sample_rate, "enhanced.wav")
 

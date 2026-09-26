@@ -17,7 +17,7 @@ from .audio import denoise as audio_denoise
 from .audio import drpe as audio_drpe
 from .audio import enhance as audio_enhance
 from .image import drpe as image_drpe
-from .image import freq_edit, watermark
+from .image import freq_edit, hybrid, watermark
 from .io import audio_cipher, audio_io, image_cipher, image_io
 
 
@@ -121,20 +121,22 @@ def cmd_filter(args):
     print(f"{args.kind}-pass ({args.filter_shape}, cutoff {args.cutoff}) -> {args.output}")
 
 
-def cmd_spectrum(args):
-    decoded = _read_image_cipher(args.input)
-    if decoded is not None:
-        data, _ = decoded
-    else:
-        data, _ = image_io.load_image(args.input)
-    image_io.save_image(args.output, freq_edit.spectrum_preview(data, args.gamma))
-    print(f"spectrum preview -> {args.output}")
+def cmd_hybrid(args):
+    near, _ = image_io.load_image(args.near, greyscale=args.greyscale)
+    far, _ = image_io.load_image(args.far, greyscale=args.greyscale)
+    result = hybrid.hybrid(near, far, args.near_cutoff, args.far_cutoff,
+                           args.filter_shape, args.near_gain)
+    image_io.save_image(args.output, result)
+    print(f"hybrid of {args.near} (near) and {args.far} (far) -> {args.output}")
+    if args.distance:
+        image_io.save_image(args.distance, hybrid.distance_preview(result))
+        print(f"distance preview -> {args.distance}")
 
 
 def cmd_denoise(args):
     signal, sample_rate = audio_io.load_audio(args.input)
     cleaned = audio_denoise.denoise_multichannel(
-        signal, over_subtraction=args.over_subtraction, floor=args.floor,
+        signal, reduction_db=args.reduction_db, smoothing=args.smoothing,
         noise_frames=args.noise_frames)
     audio_io.save_audio(args.output, cleaned, sample_rate)
     print(f"denoised {args.input} -> {args.output}")
@@ -143,8 +145,8 @@ def cmd_denoise(args):
 def cmd_enhance(args):
     signal, sample_rate = audio_io.load_audio(args.input)
     enhanced = audio_enhance.enhance_multichannel(
-        signal, sample_rate, boost=args.boost, gate_threshold=args.gate_threshold,
-        gate_floor=args.gate_floor)
+        signal, sample_rate, reduction_db=args.reduction_db, harmonics=args.harmonics,
+        clarity_db=args.clarity_db, normalize=not args.no_normalize)
     audio_io.save_audio(args.output, enhanced, sample_rate)
     print(f"enhanced {args.input} -> {args.output}")
 
@@ -248,25 +250,40 @@ def build_parser():
     sub.add_argument("--filter-shape", choices=freq_edit.FILTER_SHAPES, default="gaussian")
     sub.add_argument("--order", type=int, default=2)
 
-    sub = add("spectrum", cmd_spectrum, "render a magnitude spectrum as a viewable image")
-    sub.add_argument("input", help="an image or a cipher PNG")
+    sub = add("hybrid", cmd_hybrid, "blend two images into one that changes with distance")
+    sub.add_argument("near", help="seen up close; keeps its fine detail")
+    sub.add_argument("far", help="seen from a distance; keeps its broad shapes")
     sub.add_argument("output")
-    sub.add_argument("--gamma", type=float, default=1.0)
+    sub.add_argument("--near-cutoff", type=float, default=hybrid.DEFAULT_NEAR_CUTOFF)
+    sub.add_argument("--far-cutoff", type=float, default=hybrid.DEFAULT_FAR_CUTOFF)
+    sub.add_argument("--near-gain", type=float, default=1.0,
+                     help="boost the near image's detail if the far one dominates")
+    sub.add_argument("--filter-shape", choices=freq_edit.FILTER_SHAPES, default="gaussian")
+    sub.add_argument("--greyscale", action="store_true")
+    sub.add_argument("--distance", metavar="PATH",
+                     help="also write the hybrid at shrinking sizes, to preview both readings")
 
-    sub = add("denoise", cmd_denoise, "reduce noise by spectral subtraction")
+    sub = add("denoise", cmd_denoise, "suppress noise with the OM-LSA estimator")
     sub.add_argument("input")
     sub.add_argument("output")
-    sub.add_argument("--over-subtraction", type=float, default=2.0)
-    sub.add_argument("--floor", type=float, default=0.05)
-    sub.add_argument("--noise-frames", type=int, default=6,
-                     help="opening frames assumed to be noise only")
+    sub.add_argument("--reduction-db", type=float, default=audio_denoise.DEFAULT_REDUCTION_DB,
+                     help="most a noise-only bin is turned down, in dB")
+    sub.add_argument("--smoothing", type=float, default=audio_denoise.DEFAULT_SMOOTHING,
+                     help="decision-directed SNR smoothing; higher is steadier")
+    sub.add_argument("--noise-frames", type=int, default=audio_denoise.DEFAULT_NOISE_FRAMES,
+                     help="opening frames that seed the noise tracker")
 
     sub = add("enhance", cmd_enhance, "enhance speech clarity")
     sub.add_argument("input")
     sub.add_argument("output")
-    sub.add_argument("--boost", type=float, default=2.0)
-    sub.add_argument("--gate-threshold", type=float, default=1.5)
-    sub.add_argument("--gate-floor", type=float, default=0.1)
+    sub.add_argument("--reduction-db", type=float, default=audio_enhance.DEFAULT_REDUCTION_DB,
+                     help="most a noise-only bin is turned down, in dB; 0 disables")
+    sub.add_argument("--harmonics", type=float, default=audio_enhance.DEFAULT_HARMONICS,
+                     help="weight of the regenerated harmonics, 0 to 1")
+    sub.add_argument("--clarity-db", type=float, default=audio_enhance.DEFAULT_CLARITY_DB,
+                     help="lift of the 300-3400 Hz speech band, in dB")
+    sub.add_argument("--no-normalize", action="store_true",
+                     help="keep the level instead of normalizing loudness")
 
     sub = add("attack-report", cmd_attack_report, "measure ciphertext robustness")
     sub.add_argument("ciphertext", help="an image cipher PNG or audio cipher WAV")

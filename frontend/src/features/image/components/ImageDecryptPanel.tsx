@@ -8,6 +8,7 @@ import { useKeyInput } from '@/hooks/useKeyInput'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_PNG } from '@/lib/accept'
 import { cliCommand, keyCliArgs } from '@/lib/cli'
+import { SAMPLES } from '@/lib/samples'
 import { decryptImage } from '@/services/imageService'
 
 interface ImageDecryptPanelProps {
@@ -67,6 +68,8 @@ export function ImageDecryptPanel({
         file={cipherFile}
         onFileChange={onCipherChange}
         disabled={isRunning}
+        sample={SAMPLES.imageDecrypt}
+        onSampleLoaded={key.applySampleKey}
       />
       <KeySelector {...key.selectorProps} disabled={isRunning} />
     </OperationShell>

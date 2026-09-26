@@ -61,11 +61,9 @@ def test_modules_run_on_odd_carriers():
     mark = rng.random((8, 8))
     low = freq_edit.apply_filter(image, "low", cutoff=0.3, filter_shape="ideal")
     high = freq_edit.apply_filter(image, "high", cutoff=0.3, filter_shape="ideal")
-    preview = freq_edit.spectrum_preview(image)
     marked = watermark.embed(image, mark, 0.2)
     recovered = watermark.extract(image, marked, mark.shape, 0.2)
     assert np.allclose(low + high, image)
-    assert preview.shape == image.shape
     assert np.max(np.abs(recovered - mark)) < 1e-8
 
 
@@ -249,8 +247,9 @@ def test_zero_noise_frames_rejected(client, tone):
 
 
 @pytest.mark.parametrize("kwargs", [
-    {"over_subtraction": float("nan")},
-    {"floor": float("inf")},
+    {"reduction_db": float("nan")},
+    {"smoothing": float("inf")},
+    {"smoothing": 1.0},
     {"noise_frames": -3},
 ])
 def test_denoise_rejects_invalid_parameters(kwargs):
@@ -259,9 +258,9 @@ def test_denoise_rejects_invalid_parameters(kwargs):
 
 
 @pytest.mark.parametrize("kwargs", [
-    {"boost": float("nan")},
-    {"gate_threshold": -1.0},
-    {"gate_floor": float("nan")},
+    {"reduction_db": float("nan")},
+    {"harmonics": -1.0},
+    {"clarity_db": float("nan")},
 ])
 def test_enhance_rejects_invalid_parameters(kwargs):
     with pytest.raises(ValueError):
@@ -270,8 +269,9 @@ def test_enhance_rejects_invalid_parameters(kwargs):
 
 def test_denoise_and_enhance_endpoints(client, tone):
     noisy = tone + np.random.default_rng(6).normal(scale=0.02, size=tone.shape)
-    for route, data in (("denoise", {"noise_frames": "3", "floor": "0.1"}),
-                        ("enhance", {"boost": "3", "gate_floor": "0.2"})):
+    for route, data in (("denoise", {"noise_frames": "3", "reduction_db": "12"}),
+                        ("enhance", {"clarity_db": "6", "harmonics": "0.8",
+                                     "normalize": "false"})):
         response = client.post(f"/api/audio/{route}",
                                files={"file": ("in.wav", wav_bytes(noisy))}, data=data)
         assert response.status_code == 200, response.text
@@ -280,7 +280,7 @@ def test_denoise_and_enhance_endpoints(client, tone):
         assert np.isfinite(out).all()
 
 
-# -- Filter and spectrum validation -------------------------------------------
+# -- Filter validation -------------------------------------------
 
 @pytest.mark.parametrize("data", [
     {"kind": "band", "cutoff": "0.3", "high_cutoff": "0.2"},
@@ -294,12 +294,6 @@ def test_filter_rejects_invalid_parameters(client, data):
     response = client.post("/api/image/filter", files={"file": ("i.png", image)}, data=data)
     assert response.status_code in (400, 422)
 
-
-def test_spectrum_rejects_bad_gamma(client):
-    image = png_bytes(np.random.default_rng(8).random((1, 32, 32)))
-    response = client.post("/api/image/spectrum", files={"file": ("i.png", image)},
-                           data={"gamma": "0"})
-    assert response.status_code == 400
 
 
 # -- Analysis ------------------------------------------------------------------

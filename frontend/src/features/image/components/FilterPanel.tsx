@@ -114,7 +114,7 @@ export function FilterPanel() {
         file={input}
         onFileChange={setInput}
         disabled={isRunning}
-        sample={SAMPLES.image}
+        sample={SAMPLES.filter}
         error={sizeError}
       />
 

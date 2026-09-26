@@ -8,6 +8,7 @@ import { useKeyInput } from '@/hooks/useKeyInput'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_CIPHER_WAV } from '@/lib/accept'
 import { cliCommand, keyCliArgs } from '@/lib/cli'
+import { SAMPLES } from '@/lib/samples'
 import { decryptAudio } from '@/services/audioService'
 
 interface AudioDecryptPanelProps {
@@ -64,6 +65,8 @@ export function AudioDecryptPanel({ container, onContainerChange }: AudioDecrypt
         file={container}
         onFileChange={onContainerChange}
         disabled={isRunning}
+        sample={SAMPLES.audioDecrypt}
+        onSampleLoaded={key.applySampleKey}
       />
       <KeySelector {...key.selectorProps} disabled={isRunning} />
     </OperationShell>

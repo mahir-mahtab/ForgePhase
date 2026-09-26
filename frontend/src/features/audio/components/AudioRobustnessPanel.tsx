@@ -9,6 +9,7 @@ import { useKeyInput } from '@/hooks/useKeyInput'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_AUDIO, ACCEPT_CIPHER_WAV } from '@/lib/accept'
 import { cliCommand, keyCliArgs } from '@/lib/cli'
+import { SAMPLES } from '@/lib/samples'
 import { audioRobustnessReport } from '@/services/audioService'
 
 export function AudioRobustnessPanel() {
@@ -61,6 +62,8 @@ export function AudioRobustnessPanel() {
         file={ciphertext}
         onFileChange={setCiphertext}
         disabled={isRunning}
+        sample={SAMPLES.audioAnalysisCipher}
+        onSampleLoaded={key.applySampleKey}
       />
       <FileDropzone
         label="Original audio"
@@ -70,6 +73,7 @@ export function AudioRobustnessPanel() {
         file={original}
         onFileChange={setOriginal}
         disabled={isRunning}
+        sample={SAMPLES.audioAnalysisOriginal}
       />
       <KeySelector {...key.selectorProps} disabled={isRunning} />
     </OperationShell>

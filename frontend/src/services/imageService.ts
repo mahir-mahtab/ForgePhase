@@ -5,6 +5,7 @@ import { form, postArtifact, postJson } from '@/services/client'
 import type {
   ArtifactResult,
   FilterRequest,
+  HybridRequest,
   ImageAttackReportRequest,
   ImageDecryptRequest,
   ImageEncryptRequest,
@@ -12,7 +13,6 @@ import type {
   KeyReuseDemoResult,
   RobustnessReport,
   ServiceResult,
-  SpectrumRequest,
   WatermarkEmbedRequest,
   WatermarkExtractRequest,
 } from '@/services/types'
@@ -24,7 +24,9 @@ export const IMAGE_DEFAULTS = {
   filterCutoff: 0.3,
   filterHighCutoff: 0.6,
   filterOrder: 2,
-  spectrumGamma: 1.0,
+  hybridNearCutoff: 0.12,
+  hybridFarCutoff: 0.03,
+  hybridNearGain: 1.0,
 } as const
 
 /** `phaseforge image-encrypt` -- DRPE over the 2D spectrum, saved as one noise PNG. */
@@ -178,21 +180,44 @@ export function applyFilter(
   )
 }
 
-/** `phaseforge spectrum` -- render a log-scaled magnitude image. */
-export function renderSpectrum(
-  request: SpectrumRequest,
+const HYBRID_FILENAMES = {
+  hybrid: 'hybrid.png',
+  distance: 'distance.png',
+  low: 'far_low_pass.png',
+  high: 'near_high_pass.png',
+} as const
+
+const HYBRID_VIEW_LABELS = {
+  hybrid: 'Hybrid',
+  distance: 'Hybrid at 1, 1/2, 1/4 and 1/8 size',
+  low: 'Far image, low band only',
+  high: 'Near image, high band only',
+} as const
+
+/** `phaseforge hybrid` -- one image up close, another from a distance. */
+export function createHybrid(
+  request: HybridRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
   return postArtifact(
-    'spectrum',
-    'image/spectrum',
+    'hybrid',
+    'image/hybrid',
     form({
-      file: request.input,
-      gamma: String(request.gamma),
+      near: request.near,
+      far: request.far,
+      near_cutoff: String(request.nearCutoff),
+      far_cutoff: String(request.farCutoff),
+      near_gain: String(request.nearGain),
+      filter_shape: request.filterShape,
+      greyscale: String(request.greyscale),
+      view: request.view,
     }),
-    'spectrum.png',
+    HYBRID_FILENAMES[request.view],
     [
-      { label: 'Source', value: request.input.name },
-      { label: 'Gamma', value: String(request.gamma) },
+      { label: 'Near', value: request.near.name },
+      { label: 'Far', value: request.far.name },
+      { label: 'Showing', value: HYBRID_VIEW_LABELS[request.view] },
+      { label: 'Cutoffs', value: `near ${request.nearCutoff}, far ${request.farCutoff}` },
+      { label: 'Near gain', value: String(request.nearGain) },
     ],
     request.signal,
   )

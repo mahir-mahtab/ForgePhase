@@ -3,11 +3,11 @@ import { useCallback, useState } from 'react'
 import { ToolPanel } from '@/components/shared/ToolPanel'
 import { WorkspaceHeader } from '@/components/shared/WorkspaceHeader'
 import { FilterPanel } from '@/features/image/components/FilterPanel'
+import { HybridPanel } from '@/features/image/components/HybridPanel'
 import { ImageDecryptPanel } from '@/features/image/components/ImageDecryptPanel'
 import { ImageEncryptPanel } from '@/features/image/components/ImageEncryptPanel'
 import { ImageRobustnessPanel } from '@/features/image/components/ImageRobustnessPanel'
 import { KeyReuseAttackPanel } from '@/features/image/components/KeyReuseAttackPanel'
-import { SpectrumPanel } from '@/features/image/components/SpectrumPanel'
 import { WatermarkPanel } from '@/features/image/components/WatermarkPanel'
 import type { ImageTool } from '@/lib/navigation'
 
@@ -44,8 +44,8 @@ export default function ImageWorkspace({ tool, onToolChange }: Props) {
       <ToolPanel active={tool === 'filter'}>
         <FilterPanel />
       </ToolPanel>
-      <ToolPanel active={tool === 'spectrum'}>
-        <SpectrumPanel />
+      <ToolPanel active={tool === 'hybrid'}>
+        <HybridPanel />
       </ToolPanel>
       <ToolPanel active={tool === 'analysis'}>
         <ImageRobustnessPanel />

@@ -47,7 +47,7 @@ src/
 │   ├── layout/               Sidebar, API status, theme toggle
 │   └── shared/               Operation card, dropzone, key selector, result views
 ├── features/
-│   ├── image/                Encrypt, decrypt, watermark, filter, spectrum, analysis
+│   ├── image/                Encrypt, decrypt, watermark, filter, hybrid, analysis
 │   └── audio/                Encrypt, decrypt, denoise, enhance, analysis
 ├── hooks/                    useOperation, useKeyInput, usePixelLimit, …
 ├── lib/                      Pure helpers: CLI quoting, report parsing, and
@@ -69,8 +69,10 @@ src/
 - **Handoffs.** Encrypt results have *Open in Decrypt*; a watermark embed has
   *Check with Extract*, which fills in the matching size, strength, position
   and colour setting.
-- **Samples.** `public/samples` holds a test image, a watermark and two speech
-  clips, offered via *Use sample* on the relevant inputs.
+- **Samples.** `vite.config.ts` serves the repository's `samples/` folder at
+  `/samples` and copies it into the build. `lib/samples.ts` lists one entry
+  per input, offered via *Use sample*; a sample cipher also fills in its
+  passphrase.
 - **Client-side ports.** `lib/mask.ts` mirrors `freq_edit.build_mask` for the
   live filter preview, `lib/watermark.ts` mirrors `watermark.position_range`,
   and `lib/limits.ts` mirrors the API's pixel limits, so an invalid watermark

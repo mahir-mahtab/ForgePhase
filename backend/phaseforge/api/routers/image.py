@@ -7,7 +7,7 @@ touches pixels -- decoding, transforms, encoding -- to :func:`support.run_job`.
 import numpy as np
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from ...image import drpe, freq_edit, watermark
+from ...image import drpe, freq_edit, hybrid, watermark
 from ...io import image_cipher, image_io
 from .. import support
 
@@ -57,25 +57,6 @@ async def decrypt(file: UploadFile = File(...),
     return await support.run_job(work)
 
 
-@router.post("/spectrum")
-async def spectrum(file: UploadFile = File(...), gamma: float = Form(1.0)):
-    """Render a magnitude spectrum as a viewable PNG.
-
-    Accepts an ordinary image or a cipher PNG; a cipher is recognised by its
-    embedded metadata and shown as the complex ciphertext it holds.
-    """
-    payload = await support.read_upload(file)
-
-    def work():
-        if image_cipher.is_cipher_png(payload):
-            data, _ = support.decode_image_cipher(payload)
-        else:
-            data, _ = support.decode_image(payload, max_pixels=support.MAX_EDIT_PIXELS)
-        return support.image_response(freq_edit.spectrum_preview(data, gamma), "spectrum.png")
-
-    return await support.run_job(work)
-
-
 @router.post("/filter")
 async def filter_image(file: UploadFile = File(...), kind: str = Form("low"),
                        cutoff: float = Form(0.3), high_cutoff: float | None = Form(None),
@@ -88,6 +69,41 @@ async def filter_image(file: UploadFile = File(...), kind: str = Form("low"),
         filtered = freq_edit.apply_filter(image, kind, cutoff, high_cutoff,
                                           filter_shape, order)
         return support.image_response(filtered, "filtered.png", mode)
+
+    return await support.run_job(work)
+
+
+HYBRID_VIEWS = ("hybrid", "distance", "low", "high")
+
+
+@router.post("/hybrid")
+async def hybrid_image(near: UploadFile = File(...), far: UploadFile = File(...),
+                       near_cutoff: float = Form(hybrid.DEFAULT_NEAR_CUTOFF),
+                       far_cutoff: float = Form(hybrid.DEFAULT_FAR_CUTOFF),
+                       filter_shape: str = Form("gaussian"), near_gain: float = Form(1.0),
+                       greyscale: bool = Form(False), view: str = Form("hybrid")):
+    """Blend two aligned images into one that changes with viewing distance.
+
+    ``view`` picks what comes back: the hybrid itself, a ``distance`` strip of
+    it at shrinking sizes, or either band on its own (``low`` or ``high``).
+    """
+    if view not in HYBRID_VIEWS:
+        raise HTTPException(400, f"view must be one of {HYBRID_VIEWS}, got {view!r}")
+    near_data = await support.read_upload(near)
+    far_data = await support.read_upload(far)
+
+    def work():
+        near_image, _ = support.decode_image(near_data, greyscale, support.MAX_EDIT_PIXELS)
+        far_image, _ = support.decode_image(far_data, greyscale, support.MAX_EDIT_PIXELS)
+        args = (near_image, far_image, near_cutoff, far_cutoff, filter_shape, near_gain)
+        if view == "low":
+            return support.image_response(hybrid.components(*args)[0], "low.png")
+        if view == "high":
+            return support.image_response(hybrid.components(*args)[1] + 0.5, "high.png")
+        result = hybrid.hybrid(*args)
+        if view == "distance":
+            return support.image_response(hybrid.distance_preview(result), "distance.png")
+        return support.image_response(result, "hybrid.png")
 
     return await support.run_job(work)
 

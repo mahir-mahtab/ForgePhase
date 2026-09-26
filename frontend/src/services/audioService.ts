@@ -13,15 +13,16 @@ import type {
   ServiceResult,
 } from '@/services/types'
 
-/** Defaults lifted from `phaseforge/cli.py` and `audio/drpe.py`. */
+/** Defaults lifted from `audio/drpe.py`, `audio/denoise.py` and `audio/enhance.py`. */
 export const AUDIO_DEFAULTS = {
   blockSize: 4096,
-  overSubtraction: 2.0,
-  floor: 0.05,
+  denoiseReductionDb: 20,
+  smoothing: 0.98,
   noiseFrames: 6,
-  boost: 2.0,
-  gateThreshold: 1.5,
-  gateFloor: 0.1,
+  enhanceReductionDb: 15,
+  harmonics: 0.5,
+  clarityDb: 4,
+  normalize: true,
 } as const
 
 /** The powers of two inside the backend's accepted block-size range. */
@@ -91,7 +92,7 @@ export function decryptAudio(
   )
 }
 
-/** `phaseforge denoise` -- spectral subtraction against an estimated floor. */
+/** `phaseforge denoise` -- OM-LSA suppression with a tracked noise estimate. */
 export function denoiseAudio(
   request: DenoiseRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
@@ -100,21 +101,21 @@ export function denoiseAudio(
     'audio/denoise',
     form({
       file: request.input,
-      over_subtraction: String(request.overSubtraction),
-      floor: String(request.floor),
+      reduction_db: String(request.reductionDb),
+      smoothing: String(request.smoothing),
       noise_frames: String(request.noiseFrames),
     }),
     'denoised.wav',
     [
-      { label: 'Strength', value: String(request.overSubtraction) },
-      { label: 'Floor', value: String(request.floor) },
-      { label: 'Noise sample', value: `${request.noiseFrames} frames` },
+      { label: 'Method', value: 'OM-LSA' },
+      { label: 'Max reduction', value: `${request.reductionDb} dB` },
+      { label: 'Smoothing', value: String(request.smoothing) },
     ],
     request.signal,
   )
 }
 
-/** `phaseforge enhance` -- speech-band boost plus a noise gate. */
+/** `phaseforge enhance` -- TSNR + harmonic regeneration, clarity EQ and levelling. */
 export function enhanceAudio(
   request: EnhanceRequest,
 ): Promise<ServiceResult<ArtifactResult>> {
@@ -123,15 +124,17 @@ export function enhanceAudio(
     'audio/enhance',
     form({
       file: request.input,
-      boost: String(request.boost),
-      gate_threshold: String(request.gateThreshold),
-      gate_floor: String(request.gateFloor),
+      reduction_db: String(request.reductionDb),
+      harmonics: String(request.harmonics),
+      clarity_db: String(request.clarityDb),
+      normalize: String(request.normalize),
     }),
     'enhanced.wav',
     [
-      { label: 'Speech boost', value: `${request.boost}×` },
-      { label: 'Gate threshold', value: String(request.gateThreshold) },
-      { label: 'Gate level', value: String(request.gateFloor) },
+      { label: 'Noise reduction', value: request.reductionDb ? `${request.reductionDb} dB` : 'Off' },
+      { label: 'Harmonics', value: String(request.harmonics) },
+      { label: 'Clarity', value: `+${request.clarityDb} dB` },
+      { label: 'Levelling', value: request.normalize ? '−20 dBFS' : 'Off' },
     ],
     request.signal,
   )

@@ -1,9 +1,9 @@
 import {
   Activity,
   AudioLines,
-  Blend,
   Image,
   Lock,
+  ScanFace,
   LockOpen,
   type LucideIcon,
   SlidersHorizontal,
@@ -48,10 +48,10 @@ export const IMAGE_TOOLS = [
     description: 'Apply a radial gain mask to the spectrum and transform back.',
   },
   {
-    value: 'spectrum',
-    label: 'Spectrum',
-    icon: Blend,
-    description: 'See the log-scaled magnitude of the 2D Fourier transform.',
+    value: 'hybrid',
+    label: 'Hybrid',
+    icon: ScanFace,
+    description: 'Blend two images into one that reads as the first up close and the second from afar.',
   },
   {
     value: 'analysis',
@@ -78,13 +78,13 @@ export const AUDIO_TOOLS = [
     value: 'denoise',
     label: 'Denoise',
     icon: Waves,
-    description: 'Learn the noise from the start of a recording and subtract it from every frame.',
+    description: 'Track the noise through a recording and suppress it with the OM-LSA estimator.',
   },
   {
     value: 'enhance',
     label: 'Enhance',
     icon: Sparkles,
-    description: 'Boost the speech band and quiet the gaps between words.',
+    description: 'Two-step noise reduction with harmonic regeneration, clarity EQ and levelling.',
   },
   {
     value: 'analysis',

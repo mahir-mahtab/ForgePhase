@@ -51,14 +51,10 @@ def test_decrypt_requires_the_cipher_file():
     assert missing.status_code == 422
 
 
-def test_spectrum_and_attack_report_accept_the_cipher_png():
+def test_attack_report_accepts_the_cipher_png():
     image = _source()
     with TestClient(create_app()) as client:
         cipher = _encrypt(client, image)
-        spectrum = client.post(
-            "/api/image/spectrum",
-            files={"file": ("cipher.png", cipher, "image/png")},
-        )
         report = client.post(
             "/api/analysis/attack-report",
             files={
@@ -67,7 +63,5 @@ def test_spectrum_and_attack_report_accept_the_cipher_png():
             },
             data={"passphrase": "cipher test"},
         )
-    assert spectrum.status_code == 200
-    assert spectrum.headers["content-type"] == "image/png"
     assert report.status_code == 200
     assert report.json()["kind"] == "image"
