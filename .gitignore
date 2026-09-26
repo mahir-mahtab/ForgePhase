@@ -1,0 +1,46 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Build/cache
+dist/
+build/
+.cache/
+.vite/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Generated files
+outputs/
+tmp/
+temp/
+
+# Python generated media/data
+*.pyc
