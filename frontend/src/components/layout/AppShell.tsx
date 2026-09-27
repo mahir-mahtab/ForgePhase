@@ -1,13 +1,14 @@
-import { Menu, X } from 'lucide-react'
+import { ChevronDown, Menu, PanelLeftClose, PanelLeftOpen, Search, X } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { memo, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { BackendStatus } from '@/components/layout/BackendStatus'
 import { Logo } from '@/components/layout/Logo'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useBackendStatus } from '@/hooks/useBackendStatus'
-import { SECTIONS } from '@/lib/navigation'
+import { SECTIONS, type ToolItem, searchTools } from '@/lib/navigation'
 import { cn } from '@/lib/utils'
 import type { DomainKind } from '@/services/types'
 
@@ -19,12 +20,78 @@ interface AppShellProps {
   children: ReactNode
 }
 
+type DomainFilter = DomainKind | 'all'
+
+const COLLAPSED_KEY = 'phaseforge:sidebar-collapsed'
+const FILTERS: ReadonlyArray<{ id: DomainFilter; label: string; count: number }> = [
+  ...SECTIONS.map((group) => ({ id: group.id, label: group.label, count: group.tools.length })),
+  { id: 'all', label: 'All', count: SECTIONS.reduce((sum, group) => sum + group.tools.length, 0) },
+]
+
+function readCollapsed() {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function writeCollapsed(value: boolean) {
+  try {
+    localStorage.setItem(COLLAPSED_KEY, String(value))
+  } catch {
+    // Storage can be unavailable (private mode); the toggle still works for this visit.
+  }
+}
+
 function Wordmark() {
   return (
     <div className="flex items-center gap-2.5">
       <Logo className="size-9" />
       <span className="font-display font-medium text-2xl leading-none tracking-tight">PhaseForge</span>
     </div>
+  )
+}
+
+function ToolButton({
+  tool,
+  isActive,
+  tag,
+  onSelect,
+}: {
+  tool: ToolItem
+  isActive: boolean
+  /** Section name, shown in search results where both sections mix. */
+  tag?: string
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-current={isActive ? 'page' : undefined}
+      onClick={onSelect}
+      className={cn(
+        'focus-ring group flex items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm font-medium transition-colors',
+        isActive
+          ? 'bg-card text-foreground shadow-sm ring-1 ring-border'
+          : 'text-muted-foreground hover:bg-sidebar-hover hover:text-foreground',
+      )}
+    >
+      <span
+        className={cn(
+          'flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+          isActive
+            ? 'bg-highlight text-highlight-foreground'
+            : 'text-muted-foreground group-hover:bg-card group-hover:text-foreground',
+        )}
+      >
+        <tool.icon className="size-4" aria-hidden />
+      </span>
+      <span className="truncate">{tool.label}</span>
+      {tag ? (
+        <span className="ml-auto text-[0.6875rem] font-normal text-muted-foreground">{tag}</span>
+      ) : null}
+    </button>
   )
 }
 
@@ -36,97 +103,325 @@ function AppShellImpl({
 }: AppShellProps) {
   const status = useBackendStatus()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState(readCollapsed)
+  const [showAll, setShowAll] = useState(false)
+  const domainFilter: DomainFilter = showAll ? 'all' : section
+  const [closedGroups, setClosedGroups] = useState<Partial<Record<DomainKind, boolean>>>({})
+  const [query, setQuery] = useState('')
+  // The sidebar renders twice (desktop and drawer), so each copy gets its own input ref.
+  const [focusSearch, setFocusSearch] = useState<'desktop' | 'drawer' | null>(null)
+  const desktopSearchRef = useRef<HTMLInputElement>(null)
+  const drawerSearchRef = useRef<HTMLInputElement>(null)
 
-  // Escape closes the mobile drawer, as it would any other overlay.
+  const setCollapsed = useCallback((value: boolean) => {
+    setIsCollapsed(value)
+    writeCollapsed(value)
+  }, [])
+
+  // The filter box only exists in the expanded sidebar, so focus it once that has rendered.
   useEffect(() => {
-    if (!drawerOpen) return
+    if (!focusSearch) return
+    ;(focusSearch === 'desktop' ? desktopSearchRef : drawerSearchRef).current?.focus()
+    setFocusSearch(null)
+  }, [focusSearch])
+
+  // Ctrl/Cmd+B toggles the rail, "/" jumps to the filter, Escape clears it or closes the drawer.
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setDrawerOpen(false)
+      const target = event.target as HTMLElement | null
+      const typing =
+        target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b') {
+        event.preventDefault()
+        setCollapsed(!isCollapsed)
+      } else if (event.key === '/' && !typing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault()
+        if (window.matchMedia('(min-width: 64rem)').matches) {
+          setCollapsed(false)
+          setFocusSearch('desktop')
+        } else {
+          setDrawerOpen(true)
+          setFocusSearch('drawer')
+        }
+      } else if (event.key === 'Escape') {
+        if (query && target?.getAttribute('type') === 'search') setQuery('')
+        else if (drawerOpen) setDrawerOpen(false)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [drawerOpen])
+  }, [isCollapsed, setCollapsed, query, drawerOpen])
 
-  const sidebar = (
-    <div className="flex h-full flex-col gap-6 px-4 py-5">
+  const selectFilter = (next: DomainFilter) => {
+    setShowAll(next === 'all')
+    if (next !== 'all' && next !== section) onNavigate(next, tools[next])
+  }
+
+  const selectTool = (domain: DomainKind, tool: string) => {
+    onNavigate(domain, tool)
+    setDrawerOpen(false)
+  }
+
+  const results = useMemo(() => (query.trim() ? searchTools(query) : null), [query])
+  const visibleSections =
+    domainFilter === 'all' ? SECTIONS : SECTIONS.filter((group) => group.id === domainFilter)
+  const activeGroup = SECTIONS.find((group) => group.id === section) ?? SECTIONS[0]
+  const activeTool = activeGroup.tools.find((tool) => tool.value === tools[section])
+
+  const renderSidebar = (isMobile: boolean) => (
+    <div className="flex h-full flex-col gap-5 px-4 py-5">
       <div className="flex items-center justify-between border-b border-border px-2 pb-5">
         <Wordmark />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="lg:hidden"
-          aria-label="Close navigation"
-          onClick={() => setDrawerOpen(false)}
-        >
-          <X />
-        </Button>
+        {isMobile ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Close navigation"
+            onClick={() => setDrawerOpen(false)}
+          >
+            <X />
+          </Button>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Collapse sidebar"
+                onClick={() => setCollapsed(true)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <PanelLeftClose />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Collapse (Ctrl+B)</TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
-      <nav aria-label="Tools" className="-mx-1 flex flex-1 flex-col gap-6 overflow-y-auto px-1 [scrollbar-width:thin]">
-        {SECTIONS.map((group) => (
-          <div key={group.id} className="flex flex-col gap-1">
-            <p className="flex items-center gap-2 px-3 pb-2 text-[0.6875rem] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-              <group.icon className="size-3.5" aria-hidden />
-              {group.label}
-              <span aria-hidden className="ml-1 h-px flex-1 bg-border" />
+      <div className="flex flex-col gap-2">
+        <div role="group" aria-label="Show tools" className="flex gap-1 rounded-xl bg-secondary/60 p-1">
+          {FILTERS.map((filter) => {
+            const selected = domainFilter === filter.id
+            return (
+              <button
+                key={filter.id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => selectFilter(filter.id)}
+                className={cn(
+                  'focus-ring flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors',
+                  selected
+                    ? 'bg-card text-foreground shadow-sm ring-1 ring-border'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {filter.label}
+                <span className="font-mono text-[0.625rem] text-muted-foreground">{filter.count}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
+          <input
+            ref={isMobile ? drawerSearchRef : desktopSearchRef}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Filter tools"
+            aria-label="Filter tools"
+            className="focus-ring w-full rounded-xl border border-border bg-card/60 py-2 pr-8 pl-8.5 text-sm text-foreground transition-colors placeholder:text-muted-foreground focus:bg-card [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Clear filter"
+              className="focus-ring absolute top-1/2 right-2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          ) : (
+            <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border border-border bg-secondary px-1.5 font-mono text-[0.625rem] leading-4 text-muted-foreground lg:block">
+              /
+            </kbd>
+          )}
+        </div>
+      </div>
+
+      <nav
+        aria-label="Tools"
+        className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-1 [scrollbar-width:thin]"
+      >
+        {results ? (
+          results.length ? (
+            <div className="flex flex-col gap-1">
+              {results.map(({ domain, domainLabel, tool }) => (
+                <ToolButton
+                  key={`${domain}-${tool.value}`}
+                  tool={tool}
+                  tag={domainLabel}
+                  isActive={domain === section && tools[domain] === tool.value}
+                  onSelect={() => selectTool(domain, tool.value)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+              No tools match &ldquo;{query.trim()}&rdquo;.
             </p>
-            {group.tools.map((tool) => {
-              const isActive = group.id === section && tools[group.id] === tool.value
-              return (
+          )
+        ) : (
+          visibleSections.map((group) => {
+            const open = !closedGroups[group.id]
+            return (
+              <div key={group.id} className="flex flex-col gap-1">
                 <button
-                  key={tool.value}
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setClosedGroups((prev) => ({ ...prev, [group.id]: open }))}
+                  className="focus-ring flex items-center gap-2 rounded-md px-3 pb-2 text-[0.6875rem] font-semibold tracking-[0.14em] text-muted-foreground uppercase transition-colors hover:text-foreground"
+                >
+                  <group.icon className="size-3.5" aria-hidden />
+                  {group.label}
+                  <span aria-hidden className="ml-1 h-px flex-1 bg-border" />
+                  <ChevronDown
+                    className={cn('size-3.5 transition-transform', !open && '-rotate-90')}
+                    aria-hidden
+                  />
+                </button>
+                {open
+                  ? group.tools.map((tool) => (
+                      <ToolButton
+                        key={tool.value}
+                        tool={tool}
+                        isActive={group.id === section && tools[group.id] === tool.value}
+                        onSelect={() => selectTool(group.id, tool.value)}
+                      />
+                    ))
+                  : null}
+              </div>
+            )
+          })
+        )}
+      </nav>
+
+      <div className="flex items-center justify-between gap-2 border-t border-border px-1 pt-4">
+        <BackendStatus status={status} />
+        <ThemeToggle />
+      </div>
+    </div>
+  )
+
+  const rail = (
+    <div className="flex h-full flex-col items-center gap-4 py-5">
+      <Logo className="size-9" />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Expand sidebar"
+            onClick={() => setCollapsed(false)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <PanelLeftOpen />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right">Expand (Ctrl+B)</TooltipContent>
+      </Tooltip>
+
+      <div role="group" aria-label="Section" className="flex flex-col gap-1 rounded-xl bg-secondary/60 p-1">
+        {SECTIONS.map((group) => (
+          <Tooltip key={group.id}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-pressed={section === group.id}
+                aria-label={group.label}
+                onClick={() => onNavigate(group.id, tools[group.id])}
+                className={cn(
+                  'focus-ring flex size-8 items-center justify-center rounded-lg transition-colors',
+                  section === group.id
+                    ? 'bg-card text-foreground shadow-sm ring-1 ring-border'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <group.icon className="size-4" aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">{group.label}</TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+
+      <nav
+        aria-label="Tools"
+        className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto border-t border-border pt-4 [scrollbar-width:none]"
+      >
+        {activeGroup.tools.map((tool) => {
+          const isActive = tools[section] === tool.value
+          return (
+            <Tooltip key={tool.value}>
+              <TooltipTrigger asChild>
+                <button
                   type="button"
                   aria-current={isActive ? 'page' : undefined}
-                  onClick={() => {
-                    onNavigate(group.id, tool.value)
-                    setDrawerOpen(false)
-                  }}
+                  aria-label={tool.label}
+                  onClick={() => onNavigate(section, tool.value)}
                   className={cn(
-                    'focus-ring group relative flex items-center gap-3 rounded-xl px-2.5 py-2 text-left text-sm font-medium transition-all hover:translate-x-0.5',
+                    'focus-ring flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors',
                     isActive
-                      ? 'bg-card text-foreground shadow-sm ring-1 ring-border'
+                      ? 'bg-highlight text-highlight-foreground'
                       : 'text-muted-foreground hover:bg-sidebar-hover hover:text-foreground',
                   )}
                 >
-                  <span
-                    className={cn(
-                      'flex size-8 items-center justify-center rounded-lg transition-colors group-hover:bg-card',
-                      isActive
-                        ? 'bg-highlight text-highlight-foreground group-hover:bg-highlight'
-                        : 'text-muted-foreground group-hover:text-foreground',
-                    )}
-                  >
-                    <tool.icon className="size-4" aria-hidden />
-                  </span>
-                  {tool.label}
-                  {isActive ? (
-                    <span aria-hidden className="ml-auto size-1.5 rounded-full bg-highlight-foreground/60" />
-                  ) : null}
+                  <tool.icon className="size-4" aria-hidden />
                 </button>
-              )
-            })}
-          </div>
-        ))}
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-56">
+                <p className="font-semibold">{tool.label}</p>
+                <p className="text-muted-foreground">{tool.description}</p>
+              </TooltipContent>
+            </Tooltip>
+          )
+        })}
       </nav>
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card/80 p-3 shadow-sm">
-        <div className="flex items-center justify-between gap-2">
-          <BackendStatus status={status} />
-          <ThemeToggle />
-        </div>
+      <div className="flex flex-col items-center gap-1 border-t border-border pt-4">
+        <BackendStatus status={status} compact />
+        <ThemeToggle />
       </div>
     </div>
   )
 
   return (
-    <div className="min-h-dvh bg-background lg:pl-68">
-      {/* Desktop: a fixed rail. */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-68 border-r border-border bg-sidebar lg:block">
-        {sidebar}
+    <div
+      className={cn(
+        'min-h-dvh bg-background transition-[padding] duration-200 ease-out',
+        isCollapsed ? 'lg:pl-18' : 'lg:pl-72',
+      )}
+    >
+      {/* Desktop: a fixed sidebar that collapses to an icon rail. */}
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-30 hidden overflow-hidden border-r border-border bg-sidebar transition-[width] duration-200 ease-out lg:block',
+          isCollapsed ? 'w-18' : 'w-72',
+        )}
+      >
+        {isCollapsed ? rail : renderSidebar(false)}
       </aside>
 
-      {/* Mobile: the same rail as a drawer. */}
+      {/* Mobile: the same sidebar as a drawer. */}
       <div
         className={cn(
           'fixed inset-0 z-40 lg:hidden',
@@ -148,7 +443,7 @@ function AppShellImpl({
             drawerOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
-          {sidebar}
+          {renderSidebar(true)}
         </aside>
       </div>
 
@@ -163,6 +458,11 @@ function AppShellImpl({
           <Menu />
         </Button>
         <Wordmark />
+        {activeTool ? (
+          <span className="ml-auto hidden text-sm text-muted-foreground sm:block">
+            {activeGroup.label} / <span className="text-foreground">{activeTool.label}</span>
+          </span>
+        ) : null}
       </header>
 
       <div className="flex min-h-dvh flex-col">

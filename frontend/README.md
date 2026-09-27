@@ -48,10 +48,10 @@ src/
 │   └── shared/               Operation card, dropzone, key selector, result views
 ├── features/
 │   ├── image/                Encrypt, decrypt, watermark, filter, hybrid, analysis
-│   └── audio/                Encrypt, decrypt, denoise, enhance, analysis
+│   └── audio/                Encrypt, decrypt, watermark, denoise, enhance, analysis
 ├── hooks/                    useOperation, useKeyInput, usePixelLimit, …
 ├── lib/                      Pure helpers: CLI quoting, report parsing, and
-│                             ports of backend rules (mask, watermark, limits)
+│                             ports of backend rules (mask, limits)
 └── services/                 The only code that talks to the network
 ```
 
@@ -66,17 +66,15 @@ src/
   a cipher uses `KeySelector` with the `useKeyInput` hook, so a passphrase,
   key image or key audio file is validated, worded and sent the same way
   everywhere.
-- **Handoffs.** Encrypt results have *Open in Decrypt*; a watermark embed has
-  *Check with Extract*, which fills in the matching size, strength, position
-  and colour setting.
+- **Handoffs.** Encrypt results have *Open in Decrypt*; a watermark embed
+  (image or audio) has *Check with Extract*, which fills in both files.
 - **Samples.** `vite.config.ts` serves the repository's `samples/` folder at
   `/samples` and copies it into the build. `lib/samples.ts` lists one entry
   per input, offered via *Use sample*; a sample cipher also fills in its
   passphrase.
 - **Client-side ports.** `lib/mask.ts` mirrors `freq_edit.build_mask` for the
-  live filter preview, `lib/watermark.ts` mirrors `watermark.position_range`,
-  and `lib/limits.ts` mirrors the API's pixel limits, so an invalid watermark
-  position or an oversized image is caught before a request. The backend
+  live filter preview, and `lib/limits.ts` mirrors the API's pixel limits, so
+  an oversized image is caught before a request. The backend
   still validates everything. Keep each in step with its Python original.
 - **Blob URLs** are created and revoked by `useObjectUrl`, never by the
   services, so previews stay valid under React StrictMode.

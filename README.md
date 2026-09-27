@@ -17,12 +17,13 @@ plus a React app in `frontend/` that covers every command.
 | --- | --- | --- |
 | Image | Encrypt | Scrambles an image into one noise-like 16-bit `cipher.png` |
 | Image | Decrypt | Restores the image from `cipher.png` and the key |
-| Image | Watermark | Hides a mark (greyscale or colour) in the magnitude spectrum, and extracts it again |
+| Image | Watermark | Hides a mark (any size, greyscale or colour) in the magnitude spectrum, and extracts it again |
 | Image | Filter | Low-, high- or band-pass with Gaussian, Butterworth or ideal masks, with a live mask preview |
 | Image | Hybrid | Blends two images into one that reads as the first up close and the second from a distance |
 | Image | Analysis | Robustness report, and the key-reuse attack demo |
 | Audio | Encrypt | Block-by-block DRPE into one `cipher.wav` that plays as static |
 | Audio | Decrypt | Restores the recording from `cipher.wav` and the key |
+| Audio | Watermark | Hides a short clip in the upper half of the spectrum, and extracts it again |
 | Audio | Denoise | OM-LSA suppression with speech-presence-probability noise tracking (no silent lead-in needed); before/after spectrograms |
 | Audio | Enhance | Two-step noise reduction with harmonic regeneration, speech-band clarity EQ and loudness levelling; before/after spectrograms |
 | Audio | Analysis | Robustness report for an encrypted recording |
@@ -87,11 +88,15 @@ resizing it, or converting a WAV to MP3 destroys it. A cipher WAV plays for
 twice the original length, because it holds both the real and imaginary
 halves. There is no checksum, so a wrong key gives noise, not an error.
 
-**Watermark.** Embed a mark, then **Check with Extract** fills in the matching
-size, strength, position and colour setting. Extraction compares against the
-original image, so keep it. Transparent areas of a mark count as white. A
-colour watermark keeps the mark's colours on a colour image, at the cost of
-some coloured speckle; on a greyscale image it falls back to grey.
+**Watermark.** There are no settings: image + watermark gives the watermarked
+image, and original + watermarked gives the watermark back. **Check with
+Extract** carries both files over. Extraction compares against the original,
+so keep it. The mark can be any size; it is fitted to a quarter of the image,
+so it comes back at that size. Transparent areas of a mark count as white. A
+colour mark keeps its colours on a colour image; on a greyscale image it
+falls back to grey. Audio works the same way with a short clip as the mark: it
+can be up to a quarter of the recording's length (longer clips are cut), and
+it comes back at the recording's sample rate.
 
 **Hybrid.** Give it two aligned images: the near one keeps only its fine
 detail, the far one only its broad shapes. **Near to far** shows the result at
@@ -151,7 +156,7 @@ backend/
 │   ├── core/         FFT wrappers, padding, framing
 │   ├── keys/         Passphrase and key-file derivation (PBKDF2)
 │   ├── image/        DRPE, watermarking, frequency filters
-│   ├── audio/        Block DRPE, denoising, speech enhancement
+│   ├── audio/        Block DRPE, watermarking, denoising, speech enhancement
 │   ├── analysis/     Robustness attacks, the key-reuse break, metrics
 │   ├── io/           Image and audio files, cipher PNG/WAV containers
 │   ├── api/          FastAPI app and routers

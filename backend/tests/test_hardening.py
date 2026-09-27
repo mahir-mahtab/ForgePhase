@@ -58,13 +58,12 @@ def tone():
 def test_modules_run_on_odd_carriers():
     rng = np.random.default_rng(0)
     image = rng.random((1, 63, 65)) * 0.5
-    mark = rng.random((8, 8))
+    mark = rng.random(watermark.mark_shape(image.shape))
     low = freq_edit.apply_filter(image, "low", cutoff=0.3, filter_shape="ideal")
     high = freq_edit.apply_filter(image, "high", cutoff=0.3, filter_shape="ideal")
-    marked = watermark.embed(image, mark, 0.2)
-    recovered = watermark.extract(image, marked, mark.shape, 0.2)
+    recovered = watermark.extract(image, watermark.embed(image, mark))
     assert np.allclose(low + high, image)
-    assert np.max(np.abs(recovered - mark)) < 1e-8
+    assert np.max(np.abs(recovered[0] - mark)) < 1e-8
 
 
 # -- Finding 3: work runs off the event loop ----------------------------------
@@ -81,26 +80,13 @@ def test_run_job_executes_in_a_worker_thread():
 
 # -- Findings 4 and 5: watermark geometry -------------------------------------
 
-@pytest.mark.parametrize("shape", [(64, 64), (65, 65), (64, 65), (65, 64), (63, 97)])
+@pytest.mark.parametrize("shape", [(64, 64), (65, 65), (64, 65), (65, 64), (63, 97), (3, 3), (4, 5)])
 def test_watermark_round_trip_every_parity(shape):
     rng = np.random.default_rng(sum(shape))
-    image = rng.random((3, *shape)) * 0.5
-    mark = rng.random((16, 16))  # asymmetric on purpose
-    low, high = watermark.position_range(image.shape, mark.shape)
-    for position in (low, (low + high) / 2, high):
-        marked = watermark.embed(image, mark, 0.2, position)
-        recovered = watermark.extract(image, marked, mark.shape, 0.2, position)
-        assert np.max(np.abs(recovered - mark)) < 1e-8
-
-
-def test_watermark_position_overlapping_mirror_rejected():
-    image = np.random.default_rng(2).random((1, 64, 64))
-    with pytest.raises(ValueError, match="use 0.125 to 0.375"):
-        watermark.embed(image, np.ones((16, 16)), 0.2, position=0.05)
-
-
-def test_watermark_position_range_none_when_too_large():
-    assert watermark.position_range((64, 64), (40, 8)) is None
+    image = rng.random((3, *shape)) * 0.5 + 0.1
+    mark = rng.random(watermark.mark_shape(image.shape))  # asymmetric on purpose
+    recovered = watermark.extract(image, watermark.embed(image, mark))
+    assert np.max(np.abs(recovered - mark)) < 1e-8
 
 
 # -- Finding 6: zero-energy channels and zero strength ------------------------
@@ -110,45 +96,40 @@ def test_black_channel_does_not_poison_extraction():
     image = rng.random((3, 64, 64))
     image[1] = 0.0
     mark = rng.random((16, 16))
-    marked = watermark.embed(image, mark, 0.2)
-    recovered = watermark.extract(image, marked, mark.shape, 0.2)
+    recovered = watermark.extract(image, watermark.embed(image, mark))
     assert np.isfinite(recovered).all()
-    assert metrics.normalized_correlation(mark, recovered) > 0.999
+    for plane in recovered:
+        assert metrics.normalized_correlation(mark, plane) > 0.999
 
 
 def test_fully_black_carrier_is_rejected_cleanly():
     image = np.zeros((1, 64, 64))
     with pytest.raises(ValueError, match="no spectral energy"):
-        watermark.extract(image, image, (16, 16), 0.2)
+        watermark.extract(image, image)
 
 
 @pytest.mark.parametrize("strength", [0.0, -1.0, float("nan"), float("inf")])
-def test_invalid_strength_rejected(client, strength):
-    carrier = png_bytes(np.random.default_rng(4).random((1, 64, 64)))
-    mark = png_bytes(np.ones((1, 8, 8)))
-    response = client.post("/api/image/watermark/embed",
-                           files={"file": ("c.png", carrier), "watermark_file": ("m.png", mark)},
-                           data={"strength": str(strength)})
-    assert response.status_code in (400, 422)
+def test_invalid_strength_rejected(strength):
+    image = np.random.default_rng(4).random((1, 64, 64))
+    with pytest.raises(ValueError, match="strength"):
+        watermark.embed(image, np.ones((8, 8)), strength)
 
 
 def test_watermark_api_round_trip_on_odd_image(client):
     rng = np.random.default_rng(5)
     carrier = rng.random((3, 65, 81)) * 0.6 + 0.2
-    mark = np.zeros((1, 12, 12))
-    mark[0, 3:9, 3:9] = 1.0
+    mark = np.zeros((1, 16, 20))  # the block size for 65 x 81
+    mark[0, 4:12, 5:15] = 1.0
     embedded = client.post(
         "/api/image/watermark/embed",
-        files={"file": ("c.png", png_bytes(carrier)), "watermark_file": ("m.png", png_bytes(mark))},
-        data={"strength": "0.3", "position": "0.25"})
+        files={"file": ("c.png", png_bytes(carrier)), "watermark_file": ("m.png", png_bytes(mark))})
     assert embedded.status_code == 200
     extracted = client.post(
         "/api/image/watermark/extract",
         files={"original": ("c.png", png_bytes(carrier)),
-               "marked": ("w.png", embedded.content)},
-        data={"height": "12", "width": "12", "strength": "0.3", "position": "0.25"})
+               "marked": ("w.png", embedded.content)})
     assert extracted.status_code == 200
-    recovered = image_io.load_image(io.BytesIO(extracted.content))[0][0]
+    recovered = image_io.load_image(io.BytesIO(extracted.content))[0].mean(axis=0)
     assert metrics.normalized_correlation(mark[0], recovered) > 0.9
 
 

@@ -16,6 +16,7 @@ from .analysis import attacks, metrics
 from .audio import denoise as audio_denoise
 from .audio import drpe as audio_drpe
 from .audio import enhance as audio_enhance
+from .audio import watermark as audio_watermark
 from .image import drpe as image_drpe
 from .image import freq_edit, hybrid, watermark
 from .io import audio_cipher, audio_io, image_cipher, image_io
@@ -95,21 +96,35 @@ def cmd_audio_decrypt(args):
 
 def cmd_watermark_embed(args):
     image, mode = image_io.load_image(args.input)
-    colour = args.colour and image.shape[0] > 1
-    mark, _ = image_io.load_image(args.watermark, greyscale=not colour)
-    mark = np.broadcast_to(mark, image.shape[:1] + mark.shape[1:]) if colour else mark[0]
-    marked = watermark.embed(image, mark, args.strength, args.position)
+    mark, _ = image_io.load_image(args.watermark)
+    marked = watermark.embed(image, mark)
     image_io.save_image(args.output, marked, mode)
-    print(f"watermarked {args.input} -> {args.output} (strength {args.strength})")
+    print(f"watermarked {args.input} -> {args.output}")
 
 
 def cmd_watermark_extract(args):
     original, _ = image_io.load_image(args.original)
     marked, _ = image_io.load_image(args.marked)
-    shape = (args.height, args.width)
-    recovered = watermark.extract(original, marked, shape, args.strength, args.position,
-                                  colour=args.colour)
+    recovered = watermark.extract(original, marked)
     image_io.save_image(args.output, image_io.normalize(recovered))
+    print(f"extracted watermark -> {args.output}")
+
+
+def cmd_audio_watermark_embed(args):
+    host, sample_rate = audio_io.load_audio(args.input)
+    mark, mark_rate = audio_io.load_audio(args.watermark)
+    marked = audio_watermark.embed(host, sample_rate, mark, mark_rate)
+    audio_io.save_audio(args.output, marked, sample_rate)
+    print(f"watermarked {args.input} -> {args.output}")
+
+
+def cmd_audio_watermark_extract(args):
+    original, sample_rate = audio_io.load_audio(args.original)
+    marked, marked_rate = audio_io.load_audio(args.marked)
+    if sample_rate != marked_rate:
+        raise ValueError(f"sample rates differ: {sample_rate} vs {marked_rate}")
+    recovered = audio_watermark.extract(original, marked)
+    audio_io.save_audio(args.output, recovered, sample_rate)
     print(f"extracted watermark -> {args.output}")
 
 
@@ -225,21 +240,23 @@ def build_parser():
     sub.add_argument("input")
     sub.add_argument("watermark")
     sub.add_argument("output")
-    sub.add_argument("--strength", type=float, default=0.15)
-    sub.add_argument("--position", type=float, default=0.25)
-    sub.add_argument("--colour", action="store_true",
-                     help="keep the watermark's colour (colour images only)")
 
     sub = add("watermark-extract", cmd_watermark_extract, "recover an embedded watermark")
     sub.add_argument("original")
     sub.add_argument("marked")
     sub.add_argument("output")
-    sub.add_argument("--height", type=int, required=True)
-    sub.add_argument("--width", type=int, required=True)
-    sub.add_argument("--strength", type=float, default=0.15)
-    sub.add_argument("--position", type=float, default=0.25)
-    sub.add_argument("--colour", action="store_true",
-                     help="keep the watermark's colour (colour images only)")
+
+    sub = add("audio-watermark-embed", cmd_audio_watermark_embed,
+              "hide a shorter recording in the spectrum")
+    sub.add_argument("input")
+    sub.add_argument("watermark", help="up to a quarter of the input's length; longer is cut")
+    sub.add_argument("output")
+
+    sub = add("audio-watermark-extract", cmd_audio_watermark_extract,
+              "recover a hidden recording")
+    sub.add_argument("original")
+    sub.add_argument("marked")
+    sub.add_argument("output")
 
     sub = add("filter", cmd_filter, "low/high/band-pass an image in the frequency domain")
     sub.add_argument("input")

@@ -19,8 +19,6 @@ import type {
 
 /** Defaults lifted from `phaseforge/cli.py` so the UI opens on valid values. */
 export const IMAGE_DEFAULTS = {
-  watermarkStrength: 0.15,
-  watermarkPosition: 0.25,
   filterCutoff: 0.3,
   filterHighCutoff: 0.6,
   filterOrder: 2,
@@ -103,17 +101,11 @@ export function embedWatermark(
     form({
       file: request.input,
       watermark_file: request.watermark,
-      strength: String(request.strength),
-      position: String(request.position),
-      colour: String(request.colour),
     }),
     'watermarked.png',
     [
-      { label: 'Carrier', value: request.input.name },
+      { label: 'Image', value: request.input.name },
       { label: 'Watermark', value: request.watermark.name },
-      { label: 'Strength', value: String(request.strength) },
-      { label: 'Position', value: String(request.position) },
-      { label: 'Colour', value: request.colour ? 'Kept' : 'Greyscale' },
     ],
     request.signal,
   )
@@ -129,18 +121,11 @@ export function extractWatermark(
     form({
       original: request.original,
       marked: request.marked,
-      height: String(request.height),
-      width: String(request.width),
-      strength: String(request.strength),
-      position: String(request.position),
-      colour: String(request.colour),
     }),
     'watermark.png',
     [
-      { label: 'Size', value: `${request.width} × ${request.height}` },
-      { label: 'Strength', value: String(request.strength) },
-      { label: 'Position', value: String(request.position) },
-      { label: 'Colour', value: request.colour ? 'Kept' : 'Greyscale' },
+      { label: 'Original', value: request.original.name },
+      { label: 'Watermarked', value: request.marked.name },
     ],
     request.signal,
   )

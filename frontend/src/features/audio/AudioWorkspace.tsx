@@ -5,6 +5,7 @@ import { WorkspaceHeader } from '@/components/shared/WorkspaceHeader'
 import { AudioDecryptPanel } from '@/features/audio/components/AudioDecryptPanel'
 import { AudioEncryptPanel } from '@/features/audio/components/AudioEncryptPanel'
 import { AudioRobustnessPanel } from '@/features/audio/components/AudioRobustnessPanel'
+import { AudioWatermarkPanel } from '@/features/audio/components/AudioWatermarkPanel'
 import { DenoisePanel } from '@/features/audio/components/DenoisePanel'
 import { EnhancePanel } from '@/features/audio/components/EnhancePanel'
 import type { AudioTool } from '@/lib/navigation'
@@ -35,6 +36,9 @@ export default function AudioWorkspace({ tool, onToolChange }: Props) {
           container={container}
           onContainerChange={setContainer}
         />
+      </ToolPanel>
+      <ToolPanel active={tool === 'watermark'}>
+        <AudioWatermarkPanel />
       </ToolPanel>
       <ToolPanel active={tool === 'denoise'}>
         <DenoisePanel />

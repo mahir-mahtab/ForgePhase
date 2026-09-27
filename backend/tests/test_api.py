@@ -163,25 +163,24 @@ def test_band_pass_requires_ordered_cutoffs(client, image):
 
 
 def test_watermark_embed_and_extract(client, image):
-    mark = np.zeros((16, 16))
+    mark = np.zeros((16, 16))  # a quarter of the 64 x 64 image: no resizing
     mark[4:12, 4:12] = 1.0
 
     embedded = client.post(
         "/api/image/watermark/embed",
         files={"file": ("in.png", png_bytes(image), "image/png"),
-               "watermark_file": ("mark.png", png_bytes(mark[None, :, :]), "image/png")},
-        data={"strength": 0.3})
+               "watermark_file": ("mark.png", png_bytes(mark[None, :, :]), "image/png")})
     assert embedded.status_code == 200
 
     extracted = client.post(
         "/api/image/watermark/extract",
         files={"original": ("in.png", png_bytes(image), "image/png"),
-               "marked": ("marked.png", embedded.content, "image/png")},
-        data={"height": 16, "width": 16, "strength": 0.3})
+               "marked": ("marked.png", embedded.content, "image/png")})
     assert extracted.status_code == 200
 
-    recovered = read_png(extracted.content)[0]
-    assert metrics.normalized_correlation(mark, recovered) > 0.9
+    recovered = read_png(extracted.content)
+    assert recovered.shape == (3, 16, 16)
+    assert metrics.normalized_correlation(mark, recovered.mean(axis=0)) > 0.9
 
 
 def test_watermark_keeps_colour(client, image):
@@ -192,15 +191,13 @@ def test_watermark_keeps_colour(client, image):
     embedded = client.post(
         "/api/image/watermark/embed",
         files={"file": ("in.png", png_bytes(image), "image/png"),
-               "watermark_file": ("mark.png", png_bytes(mark), "image/png")},
-        data={"strength": 0.3, "colour": "true"})
+               "watermark_file": ("mark.png", png_bytes(mark), "image/png")})
     assert embedded.status_code == 200
 
     extracted = client.post(
         "/api/image/watermark/extract",
         files={"original": ("in.png", png_bytes(image), "image/png"),
-               "marked": ("marked.png", embedded.content, "image/png")},
-        data={"height": 16, "width": 16, "strength": 0.3, "colour": "true"})
+               "marked": ("marked.png", embedded.content, "image/png")})
     assert extracted.status_code == 200
 
     recovered = read_png(extracted.content)
@@ -214,21 +211,48 @@ def test_watermark_extract_rejects_mismatched_sizes(client, image):
     response = client.post(
         "/api/image/watermark/extract",
         files={"original": ("a.png", png_bytes(image), "image/png"),
-               "marked": ("b.png", png_bytes(small), "image/png")},
-        data={"height": 8, "width": 8})
+               "marked": ("b.png", png_bytes(small), "image/png")})
     assert response.status_code == 400
     assert "same dimensions" in response.json()["detail"]
 
 
-def test_oversized_watermark_rejected(client, image):
-    big = np.ones((1, 60, 60))
+def test_large_watermark_is_resized(client, image):
+    big = np.ones((1, 300, 200))
     response = client.post(
         "/api/image/watermark/embed",
         files={"file": ("in.png", png_bytes(image), "image/png"),
-               "watermark_file": ("mark.png", png_bytes(big), "image/png")},
-        data={"strength": 0.2})
+               "watermark_file": ("mark.png", png_bytes(big), "image/png")})
+    assert response.status_code == 200
+    assert read_png(response.content).shape == image.shape
+
+
+def test_audio_watermark_embed_and_extract(client, signal):
+    t = np.arange(1500) / 16000
+    clip = (0.6 * np.sin(2 * np.pi * 500 * t))[None, :]
+
+    embedded = client.post(
+        "/api/audio/watermark/embed",
+        files={"file": ("in.wav", wav_bytes(signal), "audio/wav"),
+               "watermark_file": ("mark.wav", wav_bytes(clip), "audio/wav")})
+    assert embedded.status_code == 200
+
+    extracted = client.post(
+        "/api/audio/watermark/extract",
+        files={"original": ("in.wav", wav_bytes(signal), "audio/wav"),
+               "marked": ("marked.wav", embedded.content, "audio/wav")})
+    assert extracted.status_code == 200
+
+    recovered = read_wav(extracted.content)[0]
+    n = min(recovered.size, clip.shape[-1])
+    assert metrics.normalized_correlation(clip[0, :n], recovered[:n]) > 0.99
+
+
+def test_audio_watermark_extract_rejects_mismatch(client, signal):
+    response = client.post(
+        "/api/audio/watermark/extract",
+        files={"original": ("a.wav", wav_bytes(signal), "audio/wav"),
+               "marked": ("b.wav", wav_bytes(signal[:, :4000]), "audio/wav")})
     assert response.status_code == 400
-    assert "too large" in response.json()["detail"]
 
 
 def test_denoise_and_enhance(client):

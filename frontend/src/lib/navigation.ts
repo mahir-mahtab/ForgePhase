@@ -78,6 +78,12 @@ export const AUDIO_TOOLS = [
     description: 'Restore the original recording.',
   },
   {
+    value: 'watermark',
+    label: 'Watermark',
+    icon: Stamp,
+    description: 'Hide a short clip and extract it again.',
+  },
+  {
     value: 'denoise',
     label: 'Denoise',
     icon: Waves,
@@ -109,4 +115,30 @@ export const SECTIONS: ReadonlyArray<{
   { id: 'image', label: 'Image', icon: Image, tools: IMAGE_TOOLS },
   { id: 'audio', label: 'Audio', icon: AudioLines, tools: AUDIO_TOOLS },
 ]
+
+export interface SearchResult {
+  domain: DomainKind
+  domainLabel: string
+  tool: ToolItem
+}
+
+/** Search tools by label, description, or domain name. */
+export function searchTools(query: string, sections = SECTIONS): SearchResult[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return []
+  const results: SearchResult[] = []
+  for (const group of sections) {
+    for (const tool of group.tools) {
+      if (
+        tool.label.toLowerCase().includes(q) ||
+        tool.description.toLowerCase().includes(q) ||
+        group.label.toLowerCase().includes(q)
+      ) {
+        results.push({ domain: group.id, domainLabel: group.label, tool })
+      }
+    }
+  }
+  return results
+}
+
 

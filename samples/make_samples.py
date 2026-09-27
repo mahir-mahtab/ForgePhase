@@ -25,6 +25,7 @@ from phaseforge.analysis import attacks  # noqa: E402
 from phaseforge.api.support import json_safe  # noqa: E402
 from phaseforge.audio import denoise, enhance  # noqa: E402
 from phaseforge.audio import drpe as audio_drpe  # noqa: E402
+from phaseforge.audio import watermark as audio_watermark  # noqa: E402
 from phaseforge.image import drpe as image_drpe  # noqa: E402
 from phaseforge.image import freq_edit, hybrid, watermark  # noqa: E402
 from phaseforge.io import audio_cipher, audio_io, image_cipher, image_io  # noqa: E402
@@ -61,6 +62,16 @@ def watermark_image(size=32):
     mark[6:9, 23:29] = 1.0       # F top
     mark[14:17, 23:27] = 1.0     # F middle
     return mark
+
+
+def chime(duration=0.6):
+    """Three rising bell tones: short enough to hide in the sample speech."""
+    t = np.arange(int(SAMPLE_RATE * duration)) / SAMPLE_RATE
+    notes = np.zeros_like(t)
+    for start, pitch in zip((0.0, 0.2, 0.4), (660, 880, 1320)):
+        after = t - start
+        notes += np.where(after >= 0, np.sin(2 * np.pi * pitch * after) * np.exp(-8 * after), 0.0)
+    return 0.6 * notes / np.max(np.abs(notes))
 
 
 def face(expression, size=512, supersample=4):
@@ -143,7 +154,7 @@ def _write_json(path, data):
     path.write_text(json.dumps(json_safe(data), indent=2) + "\n", encoding="utf-8")
 
 
-def _image_samples(picture, mark, angry, happy):
+def _image_samples(picture, angry, happy):
     folder = _folder("image-encrypt")
     image_io.save_image(folder / "image.png", picture)
     ciphertext, metadata = image_drpe.encrypt(picture, PASSPHRASE)
@@ -163,20 +174,6 @@ def _image_samples(picture, mark, angry, happy):
     _write_json(folder / "result_report.json",
                 attacks.robustness_report(picture, ciphertext, PASSPHRASE, metadata))
 
-    folder = _folder("watermark-embed")
-    image_io.save_image(folder / "image.png", picture)
-    image_io.save_image(folder / "watermark.png", mark[None, :, :])
-    marked = watermark.embed(picture, mark)
-    image_io.save_image(folder / "result_watermarked.png", marked)
-
-    folder = _folder("watermark-extract")
-    image_io.save_image(folder / "original.png", picture)
-    image_io.save_image(folder / "watermarked.png", marked)
-    # Round-trip through 8-bit PNG, as a user's file would be.
-    marked, _ = image_io.load_image(folder / "watermarked.png")
-    recovered = watermark.extract(picture, marked, mark.shape)
-    image_io.save_image(folder / "result_extracted.png", image_io.normalize(recovered))
-
     folder = _folder("filter")
     image_io.save_image(folder / "image.png", angry)
     image_io.save_image(folder / "result_low_pass.png",
@@ -190,6 +187,37 @@ def _image_samples(picture, mark, angry, happy):
     blended = hybrid.hybrid(angry, happy)
     image_io.save_image(folder / "result_hybrid.png", blended)
     image_io.save_image(folder / "result_distance.png", hybrid.distance_preview(blended))
+
+
+def _watermark_samples(picture, mark, speech, bell):
+    folder = _folder("watermark-embed")
+    image_io.save_image(folder / "image.png", picture)
+    image_io.save_image(folder / "watermark.png", mark[None, :, :])
+    marked = watermark.embed(picture, mark)
+    image_io.save_image(folder / "result_watermarked.png", marked)
+
+    folder = _folder("watermark-extract")
+    image_io.save_image(folder / "original.png", picture)
+    image_io.save_image(folder / "watermarked.png", marked)
+    # Round-trip through 8-bit PNG, as a user's file would be.
+    marked, _ = image_io.load_image(folder / "watermarked.png")
+    recovered = watermark.extract(picture, marked)
+    image_io.save_image(folder / "result_extracted.png", image_io.normalize(recovered))
+
+    folder = _folder("audio-watermark-embed")
+    audio_io.save_audio(folder / "speech.wav", speech, SAMPLE_RATE)
+    audio_io.save_audio(folder / "chime.wav", bell, SAMPLE_RATE)
+    marked = audio_watermark.embed(speech, SAMPLE_RATE, bell, SAMPLE_RATE)
+    audio_io.save_audio(folder / "result_watermarked.wav", marked, SAMPLE_RATE)
+
+    folder = _folder("audio-watermark-extract")
+    audio_io.save_audio(folder / "original.wav", speech, SAMPLE_RATE)
+    audio_io.save_audio(folder / "watermarked.wav", marked, SAMPLE_RATE)
+    # Round-trip through 16-bit WAV, as a user's files would be.
+    original, _ = audio_io.load_audio(folder / "original.wav")
+    marked, _ = audio_io.load_audio(folder / "watermarked.wav")
+    audio_io.save_audio(folder / "result_extracted.wav",
+                        audio_watermark.extract(original, marked), SAMPLE_RATE)
 
 
 def _audio_samples(clean, noisy):
@@ -223,9 +251,10 @@ def _audio_samples(clean, noisy):
 
 
 def main():
-    _image_samples(test_image(), watermark_image(), face("angry"), face("happy"))
+    _image_samples(test_image(), face("angry"), face("happy"))
     clean, noisy = noisy_speech()
     _audio_samples(clean[None, :], noisy[None, :])
+    _watermark_samples(test_image(), watermark_image(), clean[None, :], chime()[None, :])
 
     for folder in sorted(path for path in HERE.iterdir() if path.is_dir()):
         names = ", ".join(sorted(path.name for path in folder.iterdir()))

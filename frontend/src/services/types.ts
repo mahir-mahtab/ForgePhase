@@ -24,6 +24,8 @@ export type OperationId =
   | 'hybrid'
   | 'audio-encrypt'
   | 'audio-decrypt'
+  | 'audio-watermark-embed'
+  | 'audio-watermark-extract'
   | 'denoise'
   | 'enhance'
   | 'attack-report'
@@ -58,26 +60,17 @@ export interface ImageDecryptRequest extends BaseOptions, KeyOptions {
   cipherFile: File
 }
 
+/** Image or audio: the carrier and the mark are the same kind of file. */
 export interface WatermarkEmbedRequest extends BaseOptions {
   input: File
+  /** Any size; the backend fits it to the carrier. */
   watermark: File
-  /** Embedding gain. Higher survives more, but is easier to see. */
-  strength: number
-  /** Offset above DC, as a fraction of the image height. */
-  position: number
-  /** Keep the mark's colour, one plane per carrier channel. */
-  colour: boolean
 }
 
 export interface WatermarkExtractRequest extends BaseOptions {
+  /** The carrier before embedding. Extraction compares against it. */
   original: File
   marked: File
-  /** The watermark's own dimensions, which extraction cannot infer. */
-  height: number
-  width: number
-  strength: number
-  position: number
-  colour: boolean
 }
 
 export interface FilterRequest extends BaseOptions {

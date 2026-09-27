@@ -7,7 +7,6 @@ import { HybridPanel } from '@/features/image/components/HybridPanel'
 import { ImageDecryptPanel } from '@/features/image/components/ImageDecryptPanel'
 import { ImageEncryptPanel } from '@/features/image/components/ImageEncryptPanel'
 import { ImageRobustnessPanel } from '@/features/image/components/ImageRobustnessPanel'
-import { KeyReuseAttackPanel } from '@/features/image/components/KeyReuseAttackPanel'
 import { WatermarkPanel } from '@/features/image/components/WatermarkPanel'
 import type { ImageTool } from '@/lib/navigation'
 
@@ -49,7 +48,6 @@ export default function ImageWorkspace({ tool, onToolChange }: Props) {
       </ToolPanel>
       <ToolPanel active={tool === 'analysis'}>
         <ImageRobustnessPanel />
-        <KeyReuseAttackPanel />
       </ToolPanel>
     </div>
   )

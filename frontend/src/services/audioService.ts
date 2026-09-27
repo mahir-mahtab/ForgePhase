@@ -11,6 +11,8 @@ import type {
   EnhanceRequest,
   RobustnessReport,
   ServiceResult,
+  WatermarkEmbedRequest,
+  WatermarkExtractRequest,
 } from '@/services/types'
 
 /** Defaults lifted from `audio/drpe.py`, `audio/denoise.py` and `audio/enhance.py`. */
@@ -87,6 +89,46 @@ export function decryptAudio(
               ? `Image (${request.keyFile?.name ?? 'key.png'})`
               : `Audio (${request.keyFile?.name ?? 'key.wav'})`,
       },
+    ],
+    request.signal,
+  )
+}
+
+/** `phaseforge audio-watermark-embed` -- hide a shorter recording in the spectrum. */
+export function embedAudioWatermark(
+  request: WatermarkEmbedRequest,
+): Promise<ServiceResult<ArtifactResult>> {
+  return postArtifact(
+    'audio-watermark-embed',
+    'audio/watermark/embed',
+    form({
+      file: request.input,
+      watermark_file: request.watermark,
+    }),
+    'watermarked.wav',
+    [
+      { label: 'Recording', value: request.input.name },
+      { label: 'Watermark', value: request.watermark.name },
+    ],
+    request.signal,
+  )
+}
+
+/** `phaseforge audio-watermark-extract` -- recover the hidden recording by differencing. */
+export function extractAudioWatermark(
+  request: WatermarkExtractRequest,
+): Promise<ServiceResult<ArtifactResult>> {
+  return postArtifact(
+    'audio-watermark-extract',
+    'audio/watermark/extract',
+    form({
+      original: request.original,
+      marked: request.marked,
+    }),
+    'watermark.wav',
+    [
+      { label: 'Original', value: request.original.name },
+      { label: 'Watermarked', value: request.marked.name },
     ],
     request.signal,
   )

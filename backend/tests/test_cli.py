@@ -71,19 +71,34 @@ def test_audio_encrypt_decrypt_round_trip(tmp_path, audio_file):
 
 
 def test_watermark_embed_and_extract(tmp_path, image_file):
-    mark = np.zeros((16, 16))
+    mark = np.zeros((16, 16))  # a quarter of the 64 x 64 image: no resizing
     mark[4:12, 4:12] = 1.0
     mark_file = tmp_path / "mark.png"
     image_io.save_image(mark_file, mark[None, :, :])
 
     marked = tmp_path / "marked.png"
     extracted = tmp_path / "extracted.png"
-    run("watermark-embed", image_file, mark_file, marked, "--strength", 0.3)
-    run("watermark-extract", image_file, marked, extracted,
-        "--height", 16, "--width", 16, "--strength", 0.3)
+    run("watermark-embed", image_file, mark_file, marked)
+    run("watermark-extract", image_file, marked, extracted)
 
     recovered, _ = image_io.load_image(extracted, greyscale=True)
     assert metrics.normalized_correlation(mark, recovered[0]) > 0.9
+
+
+def test_audio_watermark_embed_and_extract(tmp_path, audio_file):
+    t = np.arange(1500) / 16000
+    clip = (0.6 * np.sin(2 * np.pi * 500 * t))[None, :]
+    clip_file = tmp_path / "clip.wav"
+    audio_io.save_audio(clip_file, clip, 16000)
+
+    marked = tmp_path / "marked.wav"
+    extracted = tmp_path / "extracted.wav"
+    run("audio-watermark-embed", audio_file, clip_file, marked)
+    run("audio-watermark-extract", audio_file, marked, extracted)
+
+    recovered, _ = audio_io.load_audio(extracted)
+    n = min(recovered.shape[-1], clip.shape[-1])
+    assert metrics.normalized_correlation(clip[0, :n], recovered[0, :n]) > 0.99
 
 
 @pytest.mark.parametrize("kind", ["low", "high"])

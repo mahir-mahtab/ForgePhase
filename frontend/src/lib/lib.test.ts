@@ -5,7 +5,7 @@ import { formatBytes, formatMetric, humanizeKey } from '@/lib/format'
 import { PIXEL_LIMITS, pixelLimitMessage } from '@/lib/limits'
 import { maskGain } from '@/lib/mask'
 import { normalizeReport, parseMetric } from '@/lib/report'
-import { positionRange } from '@/lib/watermark'
+import { searchTools } from '@/lib/navigation'
 
 describe('parseMetric', () => {
   it('parses the strings the API uses for non-finite floats', () => {
@@ -80,25 +80,6 @@ describe('cliCommand', () => {
   })
 })
 
-describe('positionRange', () => {
-  // Expected values come from phaseforge.image.watermark.position_range.
-  it.each([
-    [64, 64, 16, 16, 0.125, 0.374999999],
-    [65, 65, 16, 16, 0.12307692307692308, 0.3846153836153846],
-    [128, 97, 16, 16, 0.0625, 0.437499999],
-    [63, 40, 7, 5, 0.06349206349206349, 0.46031745931746026],
-  ])('matches the backend for %ix%i with a %ix%i mark', (h, w, mh, mw, min, max) => {
-    const range = positionRange(h, w, mh, mw)
-    expect(range?.min).toBeCloseTo(min, 9)
-    expect(range?.max).toBeCloseTo(max, 9)
-  })
-
-  it('returns null when the mark cannot fit', () => {
-    expect(positionRange(64, 64, 40, 8)).toBeNull()
-    expect(positionRange(10, 10, 4, 11)).toBeNull()
-  })
-})
-
 describe('maskGain', () => {
   it('matches the backend mask definitions', () => {
     const base = { cutoff: 0.3, highCutoff: null, order: 2 }
@@ -121,3 +102,42 @@ describe('pixelLimitMessage', () => {
     expect(Number(width) * Number(height)).toBeLessThanOrEqual(PIXEL_LIMITS.encrypt)
   })
 })
+
+describe('searchTools', () => {
+  it('returns empty array when query is blank or whitespace', () => {
+    expect(searchTools('')).toEqual([])
+    expect(searchTools('   ')).toEqual([])
+  })
+
+  it('finds tools by exact or partial label case-insensitively', () => {
+    const results = searchTools('denoise')
+    expect(results).toHaveLength(1)
+    expect(results[0]?.tool.value).toBe('denoise')
+    expect(results[0]?.domain).toBe('audio')
+
+    const encrypts = searchTools('encrypt')
+    expect(encrypts).toHaveLength(2)
+    expect(encrypts.map((r) => r.domain)).toEqual(['image', 'audio'])
+  })
+
+  it('finds tools by description content', () => {
+    const radial = searchTools('radial mask')
+    expect(radial).toHaveLength(1)
+    expect(radial[0]?.tool.value).toBe('filter')
+    expect(radial[0]?.domain).toBe('image')
+
+    const speech = searchTools('speech')
+    expect(speech).toHaveLength(1)
+    expect(speech[0]?.tool.value).toBe('enhance')
+  })
+
+  it('finds all tools in a domain when domain name is searched', () => {
+    const audioResults = searchTools('Audio')
+    expect(audioResults.length).toBeGreaterThanOrEqual(5)
+  })
+
+  it('returns empty array when no tools match query', () => {
+    expect(searchTools('nonexistent-term-xyz')).toEqual([])
+  })
+})
+

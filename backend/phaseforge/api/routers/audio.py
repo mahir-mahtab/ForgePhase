@@ -1,8 +1,8 @@
-"""Audio endpoints: DRPE, noise cancellation, and voice enhancement."""
+"""Audio endpoints: DRPE, watermarking, noise cancellation, and voice enhancement."""
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from ...audio import denoise, drpe, enhance
+from ...audio import denoise, drpe, enhance, watermark
 from ...io import audio_cipher
 from .. import support
 
@@ -50,6 +50,40 @@ async def decrypt(file: UploadFile = File(...),
         ciphertext, metadata = support.decode_audio_cipher(payload)
         signal = drpe.decrypt(ciphertext, key, metadata)
         return support.audio_response(signal, metadata["sample_rate"], "restored.wav")
+
+    return await support.run_job(work)
+
+
+@router.post("/watermark/embed")
+async def watermark_embed(file: UploadFile = File(...), watermark_file: UploadFile = File(...)):
+    """Hide a shorter recording in the upper half of the host's spectrum."""
+    host_data = await support.read_upload(file)
+    mark_data = await support.read_upload(watermark_file)
+
+    def work():
+        host, sample_rate = support.decode_audio(host_data)
+        mark, mark_rate = support.decode_audio(mark_data)
+        marked = watermark.embed(host, sample_rate, mark, mark_rate)
+        support.ensure_finite(marked, "watermarked audio")
+        return support.audio_response(marked, sample_rate, "watermarked.wav")
+
+    return await support.run_job(work)
+
+
+@router.post("/watermark/extract")
+async def watermark_extract(original: UploadFile = File(...), marked: UploadFile = File(...)):
+    """Recover a hidden recording by differencing the two spectra."""
+    original_data = await support.read_upload(original)
+    marked_data = await support.read_upload(marked)
+
+    def work():
+        original_signal, sample_rate = support.decode_audio(original_data)
+        marked_signal, marked_rate = support.decode_audio(marked_data)
+        if original_signal.shape != marked_signal.shape or sample_rate != marked_rate:
+            raise HTTPException(400, "the two recordings must have the same length, "
+                                     "channels and sample rate")
+        recovered = watermark.extract(original_signal, marked_signal)
+        return support.audio_response(recovered, sample_rate, "watermark.wav")
 
     return await support.run_job(work)
 
