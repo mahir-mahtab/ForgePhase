@@ -16,14 +16,20 @@ from .analysis import attacks, metrics
 from .audio import denoise as audio_denoise
 from .audio import drpe as audio_drpe
 from .audio import enhance as audio_enhance
-from .core import transform
+from .audio import watermark as audio_watermark
 from .image import drpe as image_drpe
-from .image import freq_edit, watermark
-from .io import audio_io, container, image_cipher, image_io
+from .image import freq_edit, hybrid, watermark
+from .io import audio_cipher, audio_io, image_cipher, image_io
 
 
 def _passphrase(args):
-    """Prefer an interactive prompt: a passphrase in argv lands in shell history."""
+    """Retrieve key material: from --key-image, --key-audio, --passphrase, or interactive prompt."""
+    if getattr(args, "key_image", None):
+        img, _ = image_io.load_key_image(args.key_image)
+        return img
+    if getattr(args, "key_audio", None):
+        sig, _ = audio_io.load_key_audio(args.key_audio)
+        return sig
     return args.passphrase or getpass.getpass("Passphrase: ")
 
 
@@ -40,33 +46,49 @@ def cmd_image_encrypt(args):
     image, mode = image_io.load_image(args.input, greyscale=args.greyscale)
     ciphertext, metadata = image_drpe.encrypt(image, _passphrase(args))
     metadata["mode"] = mode
-    real_png, imaginary_png = image_cipher.encode_pair(ciphertext, metadata)
-    with open(args.real_output, "wb") as output:
-        output.write(real_png)
-    with open(args.imaginary_output, "wb") as output:
-        output.write(imaginary_png)
-    print(f"encrypted {args.input} -> {args.real_output}, {args.imaginary_output} "
-          f"(ciphertext {ciphertext.shape})")
+    with open(args.output, "wb") as output:
+        output.write(image_cipher.encode(ciphertext, metadata))
+    print(f"encrypted {args.input} -> {args.output} (ciphertext {ciphertext.shape})")
+
+
+def _read_image_cipher(path):
+    """``(ciphertext, metadata)`` from a cipher PNG, or ``None`` for other files."""
+    with open(path, "rb") as source:
+        payload = source.read()
+    return image_cipher.decode(payload) if image_cipher.is_cipher_png(payload) else None
 
 
 def cmd_image_decrypt(args):
-    with open(args.real_input, "rb") as real_file, open(args.imaginary_input, "rb") as imaginary_file:
-        ciphertext, metadata = image_cipher.decode_pair(real_file.read(), imaginary_file.read())
+    decoded = _read_image_cipher(args.input)
+    if decoded is None:
+        raise ValueError(f"{args.input} is not a PhaseForge cipher PNG")
+    ciphertext, metadata = decoded
     image = image_drpe.decrypt(ciphertext, _passphrase(args), metadata)
     image_io.save_image(args.output, image, metadata.get("mode"))
-    print(f"decrypted {args.real_input}, {args.imaginary_input} -> {args.output}")
+    print(f"decrypted {args.input} -> {args.output}")
 
 
 def cmd_audio_encrypt(args):
     signal, sample_rate = audio_io.load_audio(args.input)
     ciphertext, metadata = audio_drpe.encrypt(signal, _passphrase(args), sample_rate,
                                               block_size=args.block_size)
-    container.save_container(args.output, ciphertext, metadata)
+    with open(args.output, "wb") as output:
+        output.write(audio_cipher.encode(ciphertext, metadata))
     print(f"encrypted {args.input} -> {args.output} (ciphertext {ciphertext.shape})")
 
 
+def _read_audio_cipher(path):
+    """``(ciphertext, metadata)`` from a cipher WAV, or ``None`` for other files."""
+    with open(path, "rb") as source:
+        payload = source.read()
+    return audio_cipher.decode(payload) if audio_cipher.is_cipher_wav(payload) else None
+
+
 def cmd_audio_decrypt(args):
-    ciphertext, metadata = container.load_container(args.input)
+    decoded = _read_audio_cipher(args.input)
+    if decoded is None:
+        raise ValueError(f"{args.input} is not a PhaseForge cipher WAV")
+    ciphertext, metadata = decoded
     signal = audio_drpe.decrypt(ciphertext, _passphrase(args), metadata)
     audio_io.save_audio(args.output, signal, metadata["sample_rate"])
     print(f"decrypted {args.input} -> {args.output}")
@@ -74,18 +96,35 @@ def cmd_audio_decrypt(args):
 
 def cmd_watermark_embed(args):
     image, mode = image_io.load_image(args.input)
-    mark, _ = image_io.load_image(args.watermark, greyscale=True)
-    marked = watermark.embed(image, mark[0], args.strength, args.position)
+    mark, _ = image_io.load_image(args.watermark)
+    marked = watermark.embed(image, mark)
     image_io.save_image(args.output, marked, mode)
-    print(f"watermarked {args.input} -> {args.output} (strength {args.strength})")
+    print(f"watermarked {args.input} -> {args.output}")
 
 
 def cmd_watermark_extract(args):
     original, _ = image_io.load_image(args.original)
     marked, _ = image_io.load_image(args.marked)
-    shape = (args.height, args.width)
-    recovered = watermark.extract(original, marked, shape, args.strength, args.position)
+    recovered = watermark.extract(original, marked)
     image_io.save_image(args.output, image_io.normalize(recovered))
+    print(f"extracted watermark -> {args.output}")
+
+
+def cmd_audio_watermark_embed(args):
+    host, sample_rate = audio_io.load_audio(args.input)
+    mark, mark_rate = audio_io.load_audio(args.watermark)
+    marked = audio_watermark.embed(host, sample_rate, mark, mark_rate)
+    audio_io.save_audio(args.output, marked, sample_rate)
+    print(f"watermarked {args.input} -> {args.output}")
+
+
+def cmd_audio_watermark_extract(args):
+    original, sample_rate = audio_io.load_audio(args.original)
+    marked, marked_rate = audio_io.load_audio(args.marked)
+    if sample_rate != marked_rate:
+        raise ValueError(f"sample rates differ: {sample_rate} vs {marked_rate}")
+    recovered = audio_watermark.extract(original, marked)
+    audio_io.save_audio(args.output, recovered, sample_rate)
     print(f"extracted watermark -> {args.output}")
 
 
@@ -97,20 +136,23 @@ def cmd_filter(args):
     print(f"{args.kind}-pass ({args.filter_shape}, cutoff {args.cutoff}) -> {args.output}")
 
 
-def cmd_spectrum(args):
-    if args.imaginary:
-        with open(args.input, "rb") as real_file, open(args.imaginary, "rb") as imaginary_file:
-            data, _ = image_cipher.decode_pair(real_file.read(), imaginary_file.read())
-    else:
-        data, _ = image_io.load_image(args.input)
-    image_io.save_image(args.output, freq_edit.spectrum_preview(data, args.gamma))
-    print(f"spectrum preview -> {args.output}")
+def cmd_hybrid(args):
+    near, _ = image_io.load_image(args.near, greyscale=args.greyscale)
+    far, _ = image_io.load_image(args.far, greyscale=args.greyscale)
+    result = hybrid.hybrid(near, far, args.near_cutoff, args.far_cutoff,
+                           args.filter_shape, args.near_gain)
+    image_io.save_image(args.output, result)
+    print(f"hybrid of {args.near} (near) and {args.far} (far) -> {args.output}")
+    if args.distance:
+        image_io.save_image(args.distance, hybrid.distance_preview(result))
+        print(f"distance preview -> {args.distance}")
 
 
 def cmd_denoise(args):
     signal, sample_rate = audio_io.load_audio(args.input)
     cleaned = audio_denoise.denoise_multichannel(
-        signal, over_subtraction=args.over_subtraction, floor=args.floor)
+        signal, reduction_db=args.reduction_db, smoothing=args.smoothing,
+        noise_frames=args.noise_frames)
     audio_io.save_audio(args.output, cleaned, sample_rate)
     print(f"denoised {args.input} -> {args.output}")
 
@@ -118,17 +160,17 @@ def cmd_denoise(args):
 def cmd_enhance(args):
     signal, sample_rate = audio_io.load_audio(args.input)
     enhanced = audio_enhance.enhance_multichannel(
-        signal, sample_rate, boost=args.boost, gate_threshold=args.gate_threshold)
+        signal, sample_rate, reduction_db=args.reduction_db, harmonics=args.harmonics,
+        clarity_db=args.clarity_db, normalize=not args.no_normalize)
     audio_io.save_audio(args.output, enhanced, sample_rate)
     print(f"enhanced {args.input} -> {args.output}")
 
 
 def cmd_attack_report(args):
-    if args.imaginary:
-        with open(args.ciphertext, "rb") as real_file, open(args.imaginary, "rb") as imaginary_file:
-            ciphertext, metadata = image_cipher.decode_pair(real_file.read(), imaginary_file.read())
-    else:
-        ciphertext, metadata = container.load_container(args.ciphertext)
+    decoded = _read_image_cipher(args.ciphertext) or _read_audio_cipher(args.ciphertext)
+    if decoded is None:
+        raise ValueError(f"{args.ciphertext} is not a PhaseForge cipher PNG or WAV")
+    ciphertext, metadata = decoded
     if metadata.get("kind") == "audio":
         original, _ = audio_io.load_audio(args.original)
     else:
@@ -137,7 +179,7 @@ def cmd_attack_report(args):
     print(json.dumps(_json_safe(report), indent=2, allow_nan=False))
 
 
-def cmd_kpa_demo(args):
+def cmd_key_reuse_demo(args):
     """Recover a plaintext with no passphrase, given a reused key."""
     shape = (args.size, args.size)
     oracle = attacks.build_oracle("a passphrase the attacker never learns")
@@ -150,7 +192,7 @@ def cmd_kpa_demo(args):
     recovered = crack(ciphertext)
 
     print("Chosen-plaintext attack against a reused DRPE key:")
-    print(f"  probes used         : 2")
+    print("  probes used         : 2")
     print(f"  correlation         : {metrics.normalized_correlation(secret, recovered):.6f}")
     print(f"  max absolute error  : {np.max(np.abs(recovered - secret)):.2e}")
     print("  the passphrase was never guessed; linearity alone gave up the keys.")
@@ -159,30 +201,27 @@ def cmd_kpa_demo(args):
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="phaseforge", description="Fourier-domain image and audio security toolkit")
-    parser.add_argument("--backend", choices=transform.available_backends(),
-                        default=transform.get_backend(),
-                        help="DFT implementation to use")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    def add(name, handler, help_text):
-        sub = subparsers.add_parser(name, help=help_text)
+    def add(name, handler, help_text, aliases=()):
+        sub = subparsers.add_parser(name, help=help_text, aliases=list(aliases))
         sub.set_defaults(handler=handler)
         return sub
 
     def add_passphrase(sub):
-        sub.add_argument("--passphrase", help="prompted for securely if omitted")
+        sub.add_argument("--passphrase", help="prompted for securely if omitted (unless a key file is given)")
+        sub.add_argument("--key-image", help="lossless image file whose array data acts as the key")
+        sub.add_argument("--key-audio", help="lossless audio file whose array data acts as the key")
         return sub
 
     sub = add("image-encrypt", cmd_image_encrypt, "encrypt an image with DRPE")
     sub.add_argument("input")
-    sub.add_argument("real_output")
-    sub.add_argument("imaginary_output")
+    sub.add_argument("output", help="the cipher PNG, which looks like pure noise")
     sub.add_argument("--greyscale", action="store_true")
     add_passphrase(sub)
 
-    sub = add("image-decrypt", cmd_image_decrypt, "decrypt a DRPE image cipher pair")
-    sub.add_argument("real_input")
-    sub.add_argument("imaginary_input")
+    sub = add("image-decrypt", cmd_image_decrypt, "decrypt a DRPE image cipher PNG")
+    sub.add_argument("input")
     sub.add_argument("output")
     add_passphrase(sub)
 
@@ -192,7 +231,7 @@ def build_parser():
     sub.add_argument("--block-size", type=int, default=audio_drpe.DEFAULT_BLOCK_SIZE)
     add_passphrase(sub)
 
-    sub = add("audio-decrypt", cmd_audio_decrypt, "decrypt a DRPE audio container")
+    sub = add("audio-decrypt", cmd_audio_decrypt, "decrypt a DRPE audio cipher WAV")
     sub.add_argument("input")
     sub.add_argument("output")
     add_passphrase(sub)
@@ -201,17 +240,23 @@ def build_parser():
     sub.add_argument("input")
     sub.add_argument("watermark")
     sub.add_argument("output")
-    sub.add_argument("--strength", type=float, default=0.15)
-    sub.add_argument("--position", type=float, default=0.25)
 
     sub = add("watermark-extract", cmd_watermark_extract, "recover an embedded watermark")
     sub.add_argument("original")
     sub.add_argument("marked")
     sub.add_argument("output")
-    sub.add_argument("--height", type=int, required=True)
-    sub.add_argument("--width", type=int, required=True)
-    sub.add_argument("--strength", type=float, default=0.15)
-    sub.add_argument("--position", type=float, default=0.25)
+
+    sub = add("audio-watermark-embed", cmd_audio_watermark_embed,
+              "hide a shorter recording in the spectrum")
+    sub.add_argument("input")
+    sub.add_argument("watermark", help="up to a quarter of the input's length; longer is cut")
+    sub.add_argument("output")
+
+    sub = add("audio-watermark-extract", cmd_audio_watermark_extract,
+              "recover a hidden recording")
+    sub.add_argument("original")
+    sub.add_argument("marked")
+    sub.add_argument("output")
 
     sub = add("filter", cmd_filter, "low/high/band-pass an image in the frequency domain")
     sub.add_argument("input")
@@ -222,40 +267,64 @@ def build_parser():
     sub.add_argument("--filter-shape", choices=freq_edit.FILTER_SHAPES, default="gaussian")
     sub.add_argument("--order", type=int, default=2)
 
-    sub = add("spectrum", cmd_spectrum, "render a magnitude spectrum as a viewable image")
-    sub.add_argument("input", help="an image or the real cipher PNG")
+    sub = add("hybrid", cmd_hybrid, "blend two images into one that changes with distance")
+    sub.add_argument("near", help="seen up close; keeps its fine detail")
+    sub.add_argument("far", help="seen from a distance; keeps its broad shapes")
     sub.add_argument("output")
-    sub.add_argument("--imaginary", help="imaginary cipher PNG when input is encrypted")
-    sub.add_argument("--gamma", type=float, default=1.0)
+    sub.add_argument("--near-cutoff", type=float, default=hybrid.DEFAULT_NEAR_CUTOFF)
+    sub.add_argument("--far-cutoff", type=float, default=hybrid.DEFAULT_FAR_CUTOFF)
+    sub.add_argument("--near-gain", type=float, default=1.0,
+                     help="boost the near image's detail if the far one dominates")
+    sub.add_argument("--filter-shape", choices=freq_edit.FILTER_SHAPES, default="gaussian")
+    sub.add_argument("--greyscale", action="store_true")
+    sub.add_argument("--distance", metavar="PATH",
+                     help="also write the hybrid at shrinking sizes, to preview both readings")
 
-    sub = add("denoise", cmd_denoise, "reduce noise by spectral subtraction")
+    sub = add("denoise", cmd_denoise, "suppress noise with the OM-LSA estimator")
     sub.add_argument("input")
     sub.add_argument("output")
-    sub.add_argument("--over-subtraction", type=float, default=2.0)
-    sub.add_argument("--floor", type=float, default=0.05)
+    sub.add_argument("--reduction-db", type=float, default=audio_denoise.DEFAULT_REDUCTION_DB,
+                     help="most a noise-only bin is turned down, in dB")
+    sub.add_argument("--smoothing", type=float, default=audio_denoise.DEFAULT_SMOOTHING,
+                     help="decision-directed SNR smoothing; higher is steadier")
+    sub.add_argument("--noise-frames", type=int, default=audio_denoise.DEFAULT_NOISE_FRAMES,
+                     help="opening frames that seed the noise tracker")
 
     sub = add("enhance", cmd_enhance, "enhance speech clarity")
     sub.add_argument("input")
     sub.add_argument("output")
-    sub.add_argument("--boost", type=float, default=2.0)
-    sub.add_argument("--gate-threshold", type=float, default=1.5)
+    sub.add_argument("--reduction-db", type=float, default=audio_enhance.DEFAULT_REDUCTION_DB,
+                     help="most a noise-only bin is turned down, in dB; 0 disables")
+    sub.add_argument("--harmonics", type=float, default=audio_enhance.DEFAULT_HARMONICS,
+                     help="weight of the regenerated harmonics, 0 to 1")
+    sub.add_argument("--clarity-db", type=float, default=audio_enhance.DEFAULT_CLARITY_DB,
+                     help="lift of the 300-3400 Hz speech band, in dB")
+    sub.add_argument("--no-normalize", action="store_true",
+                     help="keep the level instead of normalizing loudness")
 
     sub = add("attack-report", cmd_attack_report, "measure ciphertext robustness")
-    sub.add_argument("ciphertext", help="an audio .npz container or image real PNG")
+    sub.add_argument("ciphertext", help="an image cipher PNG or audio cipher WAV")
     sub.add_argument("original", help="the matching plaintext file, for comparison")
-    sub.add_argument("--imaginary", help="imaginary image cipher PNG")
     add_passphrase(sub)
 
-    sub = add("kpa-demo", cmd_kpa_demo, "demonstrate the chosen-plaintext break")
+    # "kpa-demo" is the command's old name, kept so existing scripts still run.
+    sub = add("key-reuse-demo", cmd_key_reuse_demo, "demonstrate the chosen-plaintext break",
+              aliases=["kpa-demo"])
     sub.add_argument("--size", type=int, default=64)
 
     return parser
 
 
 def main(argv=None):
-    args = build_parser().parse_args(argv)
-    transform.set_backend(args.backend)
-    args.handler(args)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        args.handler(args)
+    except (ValueError, OSError) as error:
+        # Bad parameters and unreadable files are user errors: report them
+        # plainly instead of with a traceback.
+        print(f"phaseforge {args.command}: error: {error}", file=sys.stderr)
+        return 1
     return 0
 
 

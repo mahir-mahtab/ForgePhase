@@ -5,106 +5,99 @@
 /* ---------------------------------------------------------------------------
    PhaseForge design tokens.
 
-   The organising idea is an instrument with two channels. CH1 is the image
-   path, CH2 the audio path, and they are the only two saturated colours in the
-   system -- everything structural is a cool neutral. Plates (spectrum plots,
-   waveform strips) are recessed and square; controls are soft-cornered. Every
-   fill is flat: no gradients anywhere.
+   Warm paper surfaces, near-black ink, a deep green accent and a lilac
+   highlight for the call to action. Serif display type over a geometric sans.
+   Components reference these tokens only, so the whole look can be changed
+   from this file.
    --------------------------------------------------------------------------- */
 
 :root {
-  /* Radii carry hierarchy: instruments are square, controls are not. */
-  --radius-plate: 0px;
-  --radius-control: 0.375rem;
-  --radius-surface: 0.625rem;
-  --radius-chip: 0.25rem;
+  --background: #ffffeb;
+  --foreground: #1a1a1a;
+  --card: #fffdf9;
+  --card-foreground: #1a1a1a;
+  --popover: #fffdf9;
+  --popover-foreground: #1a1a1a;
 
-  /* Canvas -- a cool paper, deliberately not cream. */
-  --background: #e9ebef;
-  --foreground: #0e1116;
-  --card: #ffffff;
-  --card-foreground: #0e1116;
-  --popover: #ffffff;
-  --popover-foreground: #0e1116;
+  --secondary: #f2f1df;
+  --secondary-foreground: #1a1a1a;
 
-  --secondary: #dfe2e8;
-  --secondary-foreground: #1c2230;
+  --muted: #f4f3e2;
+  --muted-foreground: #62625a;
 
-  --muted: #e4e7ec;
-  --muted-foreground: #5b6373;
+  --border: #e4e4d0;
+  --input: #d1d1c1;
+  --ring: #034f46;
 
-  --border: #d4d9e0;
-  --input: #c3cad4;
-  --ring: #2a5be8;
+  --primary: #034f46;
+  --primary-foreground: #ffffeb;
+  --accent-soft: #f6e9ff;
 
-  /* Ink button: the neutral action, so no third hue enters the system. */
-  --primary: #0e1116;
-  --primary-foreground: #ffffff;
+  /* The call-to-action colour: lilac with ink on top. */
+  --highlight: #f0d7ff;
+  --highlight-foreground: #1a1a1a;
 
-  /* Channels */
-  --ch-image: #d43700;
-  --ch-image-ink: #ffffff;
-  --ch-image-wash: #fbe6dc;
+  --sidebar: #f8f8e2;
+  --sidebar-hover: #efeed7;
 
-  --ch-audio: #2a5be8;
-  --ch-audio-ink: #ffffff;
-  --ch-audio-wash: #dfe6fd;
+  /* Recessed surface behind previews and plots. */
+  --plate: #f5f4e6;
+  --plate-edge: #e4e4d0;
+  --plate-mark: #71716e;
+  --graticule: #d8d6cc;
 
-  /* Instrument plates */
-  --plate: #f1f3f7;
-  --plate-edge: #cbd2dc;
-  --plate-mark: #5b6373;
-  --graticule: #ccd3dd;
-
-  /* Status. Rose, not red, so nothing is mistaken for CH1. */
-  --destructive: #c8264f;
+  --destructive: #c2261b;
   --destructive-foreground: #ffffff;
-  --success: #05714a;
-  --success-wash: #d8f0e5;
+  --success: #1f7a4d;
   --warning: #8a5a00;
-  --warning-wash: #f7ecd6;
+  --warning-soft: #fff1c7;
+
+  /* Chart series, fixed order: input then output. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
 }
 
 .dark {
-  --background: #0a0c10;
-  --foreground: #e9ecf2;
-  --card: #12151b;
-  --card-foreground: #e9ecf2;
-  --popover: #171b22;
-  --popover-foreground: #e9ecf2;
+  --background: #141512;
+  --foreground: #ffffeb;
+  --card: #1c1d19;
+  --card-foreground: #ffffeb;
+  --popover: #22231e;
+  --popover-foreground: #ffffeb;
 
-  --secondary: #1c212a;
-  --secondary-foreground: #dde1ea;
+  --secondary: #272822;
+  --secondary-foreground: #f4f3e2;
 
-  --muted: #161a21;
-  --muted-foreground: #878e9e;
+  --muted: #20211c;
+  --muted-foreground: #aead9d;
 
-  --border: #1f242d;
-  --input: #2a303b;
-  --ring: #4d7cff;
+  --border: #30312a;
+  --input: #414238;
+  --ring: #e3c4ff;
 
-  --primary: #e9ecf2;
-  --primary-foreground: #0a0c10;
+  --primary: #6fd0b6;
+  --primary-foreground: #0d1a17;
+  --accent-soft: #2a2136;
 
-  --ch-image: #ff4d00;
-  --ch-image-ink: #180600;
-  --ch-image-wash: #2a1206;
+  --highlight: #e3c4ff;
+  --highlight-foreground: #1a1a1a;
 
-  --ch-audio: #4d7cff;
-  --ch-audio-ink: #030a1c;
-  --ch-audio-wash: #101a34;
+  --sidebar: #181915;
+  --sidebar-hover: #23241f;
 
-  --plate: #07090c;
-  --plate-edge: #232935;
-  --plate-mark: #878e9e;
-  --graticule: #1c222c;
+  --plate: #121310;
+  --plate-edge: #30312a;
+  --plate-mark: #aead9d;
+  --graticule: #30312a;
 
-  --destructive: #ff4368;
-  --destructive-foreground: #1a0309;
-  --success: #2fd07e;
-  --success-wash: #07281a;
-  --warning: #ffc247;
-  --warning-wash: #2a1f05;
+  --destructive: #f87171;
+  --destructive-foreground: #141512;
+  --success: #4ade80;
+  --warning: #f5c451;
+  --warning-soft: #2a2208;
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
 }
 
 @theme inline {
@@ -116,6 +109,11 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-hover: var(--sidebar-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -126,30 +124,28 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --color-image: var(--ch-image);
-  --color-image-ink: var(--ch-image-ink);
-  --color-image-wash: var(--ch-image-wash);
-  --color-audio: var(--ch-audio);
-  --color-audio-ink: var(--ch-audio-ink);
-  --color-audio-wash: var(--ch-audio-wash);
-
   --color-plate: var(--plate);
   --color-plate-edge: var(--plate-edge);
 
   --color-success: var(--success);
-  --color-success-wash: var(--success-wash);
   --color-warning: var(--warning);
-  --color-warning-wash: var(--warning-wash);
+  --color-warning-soft: var(--warning-soft);
 
-  --radius-sm: var(--radius-chip);
-  --radius-md: var(--radius-control);
-  --radius-lg: var(--radius-surface);
-  --radius-none: var(--radius-plate);
+  /* The weight scale sits one step heavier than Tailwind's default. */
+  --font-weight-normal: 500;
+  --font-weight-medium: 600;
+  --font-weight-semibold: 700;
+  --font-weight-bold: 800;
 
-  --font-sans: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-    Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "Spline Sans Mono", ui-monospace, SFMono-Regular, "SF Mono",
-    Menlo, Consolas, monospace;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+
+  --font-display: "EB Garamond", ui-serif, Georgia, "Times New Roman", serif;
+  --font-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
 }
 
 @layer base {
@@ -167,72 +163,65 @@
     color: var(--foreground);
     font-family: var(--font-sans);
     font-size: 0.9375rem;
-    line-height: 1.55;
+    font-weight: 500;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
   }
 
-  /*
-    Literal colours rather than var(--ring): the shorthand loses the variable
-    once Tailwind processes this layer, and a focus ring is not a place to
-    accept a silent fallback.
-  */
   :focus-visible {
-    outline: 2px solid #2a5be8;
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
-  }
-
-  .dark :focus-visible {
-    outline-color: #4d7cff;
   }
 }
 
 @layer utilities {
-  /*
-    One focus treatment for every control. Declared as a utility so it sits in
-    the utilities layer, where no component class can cancel it.
-  */
+  /* One focus treatment for every control, in the layer nothing overrides. */
   .focus-ring:focus-visible {
-    outline: 2px solid #2a5be8;
+    outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
 
-  .dark .focus-ring:focus-visible {
-    outline-color: #4d7cff;
-  }
-
-  /*
-    Archivo carries a width axis, and width is this design's expressive device:
-    headings widen, dense metadata narrows, body sits at normal. One family
-    doing the work that a display/body pairing usually does.
-  */
-  .type-display {
-    font-stretch: 115%;
-    font-weight: 700;
-    letter-spacing: -0.025em;
-    line-height: 1.04;
-  }
-
-  .type-heading {
-    font-stretch: 108%;
-    font-weight: 600;
-    letter-spacing: -0.012em;
-  }
-
-  .type-narrow {
-    font-stretch: 88%;
-  }
-
-  /* Tabular figures keep metric readouts from jittering as values update. */
+  /* Tabular figures keep numeric readouts from jittering as values update. */
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+}
 
-  /* Long, uniform lists render faster when off-screen rows are skipped. */
-  .content-auto {
-    content-visibility: auto;
-    contain-intrinsic-size: auto 56px;
-  }
+/* PhaseLoader: two waves drifting in opposite directions, one period per loop. */
+@keyframes phase-drift-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-40px); }
+}
+
+@keyframes phase-drift-right {
+  from { transform: translateX(-40px); }
+  to { transform: translateX(0); }
+}
+
+@keyframes phase-text-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes logo-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+.phase-wave-left {
+  animation: phase-drift-left 1.1s linear infinite;
+}
+
+.phase-wave-right {
+  animation: phase-drift-right 1.6s linear infinite;
+}
+
+.phase-loader-text {
+  animation: phase-text-in 0.35s ease-out;
+}
+
+.logo-breathe {
+  animation: logo-breathe 1.6s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

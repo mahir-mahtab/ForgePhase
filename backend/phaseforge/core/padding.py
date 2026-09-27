@@ -1,7 +1,6 @@
 """Power-of-two padding.
 
-Every transform in the project runs on power-of-two lengths so that a
-hand-written radix-2 FFT is sufficient (see ``core/backends/custom_backend.py``).
+Every transform in the project runs on power-of-two lengths.
 """
 
 import numpy as np

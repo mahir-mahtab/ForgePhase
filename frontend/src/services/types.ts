@@ -1,15 +1,12 @@
 /**
  * Contract types for the PhaseForge backend.
  *
- * These mirror the `phaseforge` CLI one operation at a time, so when the HTTP
- * layer is written the request shapes already line up with what the Python
- * side accepts. Nothing here performs I/O.
+ * Requests mirror the `phaseforge` CLI one operation at a time; the services
+ * translate them into the multipart fields the Python API accepts. Nothing
+ * here performs I/O.
  */
 
 export type DomainKind = 'image' | 'audio'
-
-/** `phaseforge --backend {...}` -- the DFT implementation to run with. */
-export type TransformBackend = 'numpy' | 'custom'
 
 /** `phaseforge filter --kind {...}` */
 export type FilterKind = 'low' | 'high' | 'band'
@@ -24,60 +21,62 @@ export type OperationId =
   | 'watermark-embed'
   | 'watermark-extract'
   | 'filter'
-  | 'spectrum'
+  | 'hybrid'
   | 'audio-encrypt'
   | 'audio-decrypt'
+  | 'audio-watermark-embed'
+  | 'audio-watermark-extract'
   | 'denoise'
   | 'enhance'
   | 'attack-report'
+  | 'key-reuse-demo'
 
 /** Options every operation accepts. */
 export interface BaseOptions {
-  backend: TransformBackend
   signal?: AbortSignal
+}
+
+export type KeyMode = 'passphrase' | 'image' | 'audio'
+
+/** Options for specifying cryptographic key material. */
+export interface KeyOptions {
+  keyMode?: KeyMode
+  passphrase?: string
+  keyFile?: File | null
 }
 
 /* -------------------------------------------------------------------------- */
 /* Requests                                                                    */
 /* -------------------------------------------------------------------------- */
 
-export interface ImageEncryptRequest extends BaseOptions {
+export interface ImageEncryptRequest extends BaseOptions, KeyOptions {
   input: File
-  passphrase: string
   /** Collapse to a single channel before transforming. */
   greyscale: boolean
 }
 
-export interface ImageDecryptRequest extends BaseOptions {
-  /** The real and imaginary PNGs produced by `image-encrypt`. */
-  realFile: File
-  imaginaryFile: File
-  passphrase: string
+export interface ImageDecryptRequest extends BaseOptions, KeyOptions {
+  /** The noise-like cipher PNG produced by `image-encrypt`. */
+  cipherFile: File
 }
 
+/** Image or audio: the carrier and the mark are the same kind of file. */
 export interface WatermarkEmbedRequest extends BaseOptions {
   input: File
+  /** Any size; the backend fits it to the carrier. */
   watermark: File
-  /** Embedding gain. Higher survives more, but is easier to see. */
-  strength: number
-  /** Radial placement in the spectrum, as a fraction of the Nyquist limit. */
-  position: number
 }
 
 export interface WatermarkExtractRequest extends BaseOptions {
+  /** The carrier before embedding. Extraction compares against it. */
   original: File
   marked: File
-  /** The watermark's own dimensions, which extraction cannot infer. */
-  height: number
-  width: number
-  strength: number
-  position: number
 }
 
 export interface FilterRequest extends BaseOptions {
   input: File
   kind: FilterKind
-  /** Fraction of the Nyquist limit: 0 is DC, 1 is the spectrum corner. */
+  /** Fraction of the Nyquist limit: 0 is DC, 1 is the spectrum edge. */
   cutoff: number
   /** Upper edge for band-pass; must exceed `cutoff`. Ignored otherwise. */
   highCutoff: number | null
@@ -86,87 +85,103 @@ export interface FilterRequest extends BaseOptions {
   order: number
 }
 
-export interface SpectrumRequest extends BaseOptions {
-  /** An ordinary image, or the real component of a cipher pair. */
-  input?: File
-  imaginaryFile?: File
-  /** Display gamma applied to the log-scaled magnitude. */
-  gamma: number
+/** What `/api/image/hybrid` sends back; the CLI writes `hybrid` and, with `--distance`, `distance`. */
+export type HybridView = 'hybrid' | 'distance' | 'low' | 'high'
+
+export interface HybridRequest extends BaseOptions {
+  /** Seen up close: only its fine detail is kept. */
+  near: File
+  /** Seen from a distance: only its broad shapes are kept. Fitted to `near`'s size. */
+  far: File
+  /** High-pass cutoff for `near`, as a fraction of Nyquist. */
+  nearCutoff: number
+  /** Low-pass cutoff for `far`; keep it below `nearCutoff`. */
+  farCutoff: number
+  /** Gain on the near image's detail. */
+  nearGain: number
+  filterShape: FilterShape
+  greyscale: boolean
+  view: HybridView
 }
 
-export interface AudioEncryptRequest extends BaseOptions {
+export interface AudioEncryptRequest extends BaseOptions, KeyOptions {
   input: File
-  passphrase: string
-  /** Samples per DRPE block. Powers of two avoid padding. */
+  /** Samples per DRPE block; a power of two. */
   blockSize: number
 }
 
-export interface AudioDecryptRequest extends BaseOptions {
+export interface AudioDecryptRequest extends BaseOptions, KeyOptions {
+  /** The noise-like cipher WAV produced by `audio-encrypt`. */
   container: File
-  passphrase: string
 }
 
 export interface DenoiseRequest extends BaseOptions {
   input: File
-  /** Spectral subtraction factor. Higher removes more, at the cost of musical noise. */
-  overSubtraction: number
-  /** Floor below which the subtracted magnitude is clamped. */
-  floor: number
+  /** OM-LSA gain floor: the most a noise-only bin is turned down, in dB. */
+  reductionDb: number
+  /** Decision-directed SNR smoothing in [0, 1). Higher is steadier, with softer onsets. */
+  smoothing: number
+  /** Opening frames that seed the noise tracker. */
+  noiseFrames: number
 }
 
 export interface EnhanceRequest extends BaseOptions {
   input: File
-  /** Gain applied to the speech band. */
-  boost: number
-  /** Noise gate threshold, relative to the estimated noise floor. */
-  gateThreshold: number
+  /** Most a noise-only bin is turned down, in dB; 0 turns noise reduction off. */
+  reductionDb: number
+  /** Weight of the regenerated harmonic spectrum, 0 to 1. */
+  harmonics: number
+  /** Lift of the 300-3400 Hz speech band, in dB. */
+  clarityDb: number
+  /** Level the active speech to a fixed loudness. */
+  normalize: boolean
 }
 
-export interface AttackReportRequest extends BaseOptions {
-  /** Audio ciphertext container. */
+export interface AudioAttackReportRequest extends BaseOptions, KeyOptions {
   ciphertext: File
   original: File
-  passphrase: string
 }
 
-export interface ImageAttackReportRequest extends BaseOptions {
-  realFile: File
-  imaginaryFile: File
+export interface ImageAttackReportRequest extends BaseOptions, KeyOptions {
+  cipherFile: File
   original: File
-  passphrase: string
+}
+
+export interface KeyReuseDemoRequest extends BaseOptions {
+  size: number
 }
 
 /* -------------------------------------------------------------------------- */
 /* Responses                                                                   */
 /* -------------------------------------------------------------------------- */
 
-/** A file the backend produced. `url` is null until a real backend serves one. */
+/**
+ * A file the backend produced, held in memory. Components derive a blob URL
+ * from `file` with `useObjectUrl`, which owns the URL's lifetime.
+ */
 export interface Artifact {
+  file: File
   name: string
   mimeType: string
-  byteLength: number | null
-  url: string | null
+  byteLength: number
 }
 
-export interface ImageMetrics {
-  mse: number
-  psnrDb: number
-  correlation: number
+export type Detail = { label: string; value: string }
+
+/** The payload most operations return: an output file plus what made it. */
+export interface ArtifactResult {
+  artifact: Artifact
+  details: Detail[]
 }
 
-export interface AudioMetrics {
-  mse: number
-  snrDb: number
-  segmentalSnrDb: number
-  correlation: number
-}
-
-export type Metrics = ImageMetrics | AudioMetrics
-
-/** One row of `attacks.robustness_report`. */
+/**
+ * One row of `attacks.robustness_report`. Metric keys are the backend's
+ * snake_case names; non-finite values arrive as strings and are parsed back
+ * to `Infinity`/`NaN`.
+ */
 export interface RobustnessRow {
   attack: string
-  metrics: Metrics
+  metrics: Record<string, number>
 }
 
 export interface RobustnessReport {
@@ -174,32 +189,28 @@ export interface RobustnessReport {
   rows: RobustnessRow[]
 }
 
-/** The payload most operations return: an output file plus what made it. */
-export interface ArtifactResult {
-  artifact: Artifact
-  /** Free-form detail lines for the result panel, e.g. ciphertext shape. */
-  details: Array<{ label: string; value: string }>
+export interface KeyReuseDemoResult {
+  size: number
+  probesUsed: number
+  correlation: number
+  maxAbsoluteError: number
+  images: { secret: string; ciphertext: string; recovered: string }
 }
 
-export interface CipherPairResult {
-  real: Artifact
-  imaginary: Artifact
-  bundle: Artifact
-  details: Array<{ label: string; value: string }>
+export interface BackendInfo {
+  version: string
+  limits: {
+    maxImagePixels: number
+    maxAudioSamples: number
+    maxAudioChannels: number
+  }
 }
 
 /* -------------------------------------------------------------------------- */
 /* Result envelope                                                             */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Every service resolves to one of these.
- *
- * `not-implemented` is a first-class outcome rather than a thrown error: the
- * backend genuinely is not connected yet, and that is a state the UI should
- * render calmly, not a failure it should apologise for.
- */
+/** Every service resolves to one of these; failures are values, not throws. */
 export type ServiceResult<T> =
   | { status: 'ok'; data: T }
-  | { status: 'not-implemented'; operation: OperationId; message: string }
   | { status: 'error'; operation: OperationId; message: string }

@@ -106,3 +106,28 @@ def test_rejects_image_metadata(mono):
     meta["kind"] = "image"
     with pytest.raises(ValueError, match="expected audio ciphertext"):
         drpe.decrypt(cipher, PASSPHRASE, meta)
+
+
+def test_round_trip_with_numpy_audio_key(mono):
+    key_audio = np.random.default_rng(123).normal(size=(1, 5000))
+    cipher, meta = drpe.encrypt(mono, key_audio, SAMPLE_RATE, iterations=FAST)
+    recovered = drpe.decrypt(cipher, key_audio, meta)
+    assert recovered.shape == mono.shape
+    assert np.max(np.abs(recovered - mono)) < 1e-10
+
+
+def test_round_trip_with_numpy_image_key(mono):
+    key_img = np.random.default_rng(456).random((3, 32, 32))
+    cipher, meta = drpe.encrypt(mono, key_img, SAMPLE_RATE, iterations=FAST)
+    recovered = drpe.decrypt(cipher, key_img, meta)
+    assert recovered.shape == mono.shape
+    assert np.max(np.abs(recovered - mono)) < 1e-10
+
+
+def test_wrong_numpy_key_recovers_noise(mono):
+    key1 = np.ones((1, 500))
+    key2 = np.zeros((1, 500))
+    cipher, meta = drpe.encrypt(mono, key1, SAMPLE_RATE, iterations=FAST)
+    recovered = drpe.decrypt(cipher, key2, meta)
+    assert abs(metrics.normalized_correlation(mono, recovered)) < 0.1
+

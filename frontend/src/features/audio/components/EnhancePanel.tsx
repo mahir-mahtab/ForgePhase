@@ -1,97 +1,114 @@
-import { Sparkles } from 'lucide-react'
 import { useCallback, useState } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
 import { OperationShell } from '@/components/shared/OperationShell'
 import { ParamSlider } from '@/components/shared/ParamSlider'
 import { ResultPanel } from '@/components/shared/ResultPanel'
+import { SpectrumCompare } from '@/components/shared/SpectrumCompare'
+import { SwitchField } from '@/components/shared/SwitchField'
 import { useOperation } from '@/hooks/useOperation'
 import { ACCEPT_AUDIO } from '@/lib/accept'
+import { cliCommand } from '@/lib/cli'
+import { SAMPLES } from '@/lib/samples'
 import { AUDIO_DEFAULTS, enhanceAudio } from '@/services/audioService'
-import type { TransformBackend } from '@/services/types'
 
-const ICON = <Sparkles className="size-4" aria-hidden />
-
-export function EnhancePanel({ backend }: { backend: TransformBackend }) {
+export function EnhancePanel() {
   const [file, setFile] = useState<File | null>(null)
-  const [boost, setBoost] = useState<number>(AUDIO_DEFAULTS.boost)
-  const [gateThreshold, setGateThreshold] = useState<number>(
-    AUDIO_DEFAULTS.gateThreshold,
-  )
+  const [reductionDb, setReductionDb] = useState<number>(AUDIO_DEFAULTS.enhanceReductionDb)
+  const [harmonics, setHarmonics] = useState<number>(AUDIO_DEFAULTS.harmonics)
+  const [clarityDb, setClarityDb] = useState<number>(AUDIO_DEFAULTS.clarityDb)
+  const [normalize, setNormalize] = useState<boolean>(AUDIO_DEFAULTS.normalize)
+  // The file the shown result came from, so picking a new one does not skew the comparison.
+  const [source, setSource] = useState<File | null>(null)
   const { state, execute, reset } = useOperation(enhanceAudio)
 
   const isRunning = state.phase === 'running'
-  const canRun = file !== null
 
   const handleRun = useCallback(() => {
     if (!file) return
-    void execute({ input: file, boost, gateThreshold, backend })
-  }, [backend, boost, execute, file, gateThreshold])
-
-  const command = [
-    'phaseforge --backend',
-    backend,
-    'enhance',
-    file?.name ?? '<speech.wav>',
-    'enhanced.wav --boost',
-    boost,
-    '--gate-threshold',
-    gateThreshold,
-  ].join(' ')
+    setSource(file)
+    void execute({ input: file, reductionDb, harmonics, clarityDb, normalize })
+  }, [clarityDb, execute, file, harmonics, normalize, reductionDb])
 
   return (
     <OperationShell
-      tone="audio"
-      icon={ICON}
-      title="Speech enhancement"
-      description="Lifts the speech band and gates everything below the noise floor, so consonants carry without the gaps between words getting louder too."
-      command="enhance"
+      title="Enhance speech"
+      description="Reduces noise, restores harmonics, then equalizes and levels."
       runLabel="Enhance"
-      canRun={canRun}
-      blockedReason="Pick an audio file"
+      canRun={file !== null}
+      blockedReason="Choose an audio file."
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
+      command={cliCommand(
+        'phaseforge', 'enhance', file?.name ?? 'speech.wav', 'enhanced.wav',
+        '--reduction-db', reductionDb, '--harmonics', harmonics, '--clarity-db', clarityDb,
+        !normalize && '--no-normalize',
+      )}
       result={
         <ResultPanel
           state={state}
-          tone="audio"
-          idleHint="The enhanced waveform appears here, at the input's own sample rate."
-          cliCommand={command}
+          idleHint="The enhanced audio appears here, with spectrograms and the average spectrum before and after."
+          note={
+            state.phase === 'ok' && source ? (
+              <SpectrumCompare
+                input={source}
+                output={state.data.artifact.file}
+                outputLabel="Enhanced"
+              />
+            ) : null
+          }
         />
       }
     >
       <FileDropzone
-        label="Speech audio"
+        label="Speech recording"
         kind="audio"
         accept={ACCEPT_AUDIO}
-        tone="audio"
         file={file}
         onFileChange={setFile}
         disabled={isRunning}
+        sample={SAMPLES.enhance}
       />
-
       <ParamSlider
-        label="Speech-band boost"
-        description="Gain applied across the intelligibility band. High values start to sound thin and brittle."
-        value={boost}
-        min={1}
-        max={6}
-        step={0.1}
+        label="Noise reduction"
+        description="Maximum noise reduction. 0 skips it."
+        value={reductionDb}
+        min={0}
+        max={30}
+        step={1}
+        unit="dB"
         disabled={isRunning}
-        onChange={setBoost}
+        onChange={setReductionDb}
       />
-
       <ParamSlider
-        label="Gate threshold"
-        description="Multiples of the estimated noise floor a frame must exceed to pass. Too high and quiet syllables are cut off."
-        value={gateThreshold}
-        min={0.5}
-        max={5}
-        step={0.1}
+        label="Harmonic regeneration"
+        description="Higher keeps voiced sounds fuller."
+        value={harmonics}
+        min={0}
+        max={1}
+        step={0.05}
         disabled={isRunning}
-        onChange={setGateThreshold}
+        onChange={setHarmonics}
+      />
+      <ParamSlider
+        label="Clarity"
+        description="Speech-band boost. Above 8 dB sounds thin."
+        value={clarityDb}
+        min={0}
+        max={12}
+        step={0.5}
+        unit="dB"
+        disabled={isRunning}
+        onChange={setClarityDb}
+      />
+      <SwitchField
+        label="Level loudness"
+        description="Level speech to −20 dBFS."
+        checked={normalize}
+        onCheckedChange={setNormalize}
+        disabled={isRunning}
       />
     </OperationShell>
   )

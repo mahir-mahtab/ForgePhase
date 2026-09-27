@@ -1,92 +1,35 @@
-import { AlertTriangle, Loader2, PlugZap } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { memo } from 'react'
 
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
+import { PhaseLoader } from '@/components/shared/PhaseLoader'
 
-/** Hoisted: a constant tree, so it is allocated once rather than per render. */
-const RUNNING_SKELETON = (
-  <div className="flex flex-col gap-3">
-    <Skeleton className="h-36 w-full" />
-    <Skeleton className="h-4 w-2/3" />
-    <Skeleton className="h-4 w-1/3" />
-  </div>
-)
-
-function IdleStateImpl({
-  hint,
-  tone,
-}: {
-  hint: string
-  tone: 'image' | 'audio'
-}) {
+function IdleStateImpl({ hint }: { hint: string }) {
   return (
-    <div className="flex min-h-64 flex-col justify-center gap-3">
-      <span
-        className={cn('h-px w-8', tone === 'image' ? 'bg-image' : 'bg-audio')}
-        aria-hidden
-      />
-      <p className="max-w-[38ch] text-sm text-muted-foreground text-pretty">
-        {hint}
-      </p>
+    <div className="flex min-h-56 items-center justify-center rounded-md border border-dashed border-border p-6 text-center">
+      <p className="max-w-[40ch] text-sm text-muted-foreground text-pretty">{hint}</p>
     </div>
   )
 }
 
 function RunningStateImpl() {
   return (
-    <div className="flex min-h-64 flex-col gap-4">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" aria-hidden />
-        <span>Working…</span>
-      </div>
-      {RUNNING_SKELETON}
-    </div>
-  )
-}
-
-function NotImplementedStateImpl({
-  message,
-  cliCommand,
-}: {
-  message: string
-  cliCommand: string
-}) {
-  return (
-    <div className="flex min-h-64 flex-col gap-4 rounded-lg border border-border bg-muted/40 p-5">
-      <div className="flex items-center gap-2">
-        <PlugZap className="size-4 text-muted-foreground" aria-hidden />
-        <Badge variant="notice">Backend not connected</Badge>
-      </div>
-
-      <p className="text-sm text-foreground">{message}</p>
-
-      <div className="flex flex-col gap-1.5">
-        <span className="type-narrow text-xs text-muted-foreground">
-          The same call, on the command line
-        </span>
-        <code className="overflow-x-auto border border-border bg-plate px-3 py-2 font-mono text-xs whitespace-pre text-foreground">
-          {cliCommand}
-        </code>
-      </div>
-    </div>
+    <PhaseLoader className="min-h-56 rounded-md border border-border bg-muted/30 p-6" />
   )
 }
 
 function ErrorStateImpl({ message }: { message: string }) {
   return (
-    <div className="flex min-h-64 flex-col gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-5">
-      <div className="flex items-center gap-2">
-        <AlertTriangle className="size-4 text-destructive" aria-hidden />
-        <Badge variant="destructive">Failed</Badge>
-      </div>
-      <p className="text-sm text-foreground">{message}</p>
+    <div
+      role="alert"
+      className="flex min-h-56 flex-col items-center justify-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center"
+    >
+      <AlertCircle className="size-5 text-destructive" aria-hidden />
+      <p className="text-sm font-medium">That didn’t work</p>
+      <p className="max-w-[48ch] text-sm text-muted-foreground text-pretty">{message}</p>
     </div>
   )
 }
 
 export const IdleState = memo(IdleStateImpl)
 export const RunningState = memo(RunningStateImpl)
-export const NotImplementedState = memo(NotImplementedStateImpl)
 export const ErrorState = memo(ErrorStateImpl)

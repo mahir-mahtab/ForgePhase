@@ -1,78 +1,74 @@
-import { Unlock } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 
 import { FileDropzone } from '@/components/shared/FileDropzone'
+import { KeySelector } from '@/components/shared/KeySelector'
 import { OperationShell } from '@/components/shared/OperationShell'
-import { PassphraseField } from '@/components/shared/PassphraseField'
 import { ResultPanel } from '@/components/shared/ResultPanel'
+import { useKeyInput } from '@/hooks/useKeyInput'
 import { useOperation } from '@/hooks/useOperation'
-import { ACCEPT_CONTAINER } from '@/lib/accept'
+import { ACCEPT_CIPHER_WAV } from '@/lib/accept'
+import { cliCommand, keyCliArgs } from '@/lib/cli'
+import { SAMPLES } from '@/lib/samples'
 import { decryptAudio } from '@/services/audioService'
-import type { TransformBackend } from '@/services/types'
 
-const ICON = <Unlock className="size-4" aria-hidden />
+interface AudioDecryptPanelProps {
+  container: File | null
+  onContainerChange: (file: File | null) => void
+}
 
-export function AudioDecryptPanel({ backend }: { backend: TransformBackend }) {
-  const [container, setContainer] = useState<File | null>(null)
-  const [passphrase, setPassphrase] = useState('')
+export function AudioDecryptPanel({ container, onContainerChange }: AudioDecryptPanelProps) {
+  const key = useKeyInput()
   const { state, execute, reset } = useOperation(decryptAudio)
 
   const isRunning = state.phase === 'running'
-  const canRun = container !== null && passphrase.length > 0
+  const canRun = container !== null && key.hasKey
+  const blockedReason = container === null ? 'Choose the encrypted audio.' : key.missingReason
 
   const handleRun = useCallback(() => {
     if (!container) return
-    void execute({ container, passphrase, backend })
-  }, [backend, container, execute, passphrase])
-
-  const command = [
-    'phaseforge --backend',
-    backend,
-    'audio-decrypt',
-    container?.name ?? '<cipher.npz>',
-    'restored.wav',
-  ].join(' ')
+    void execute({ container, ...key.options })
+  }, [container, execute, key.options])
 
   return (
     <OperationShell
-      tone="audio"
-      icon={ICON}
-      title="Decrypt a container"
-      description="Reads the sample rate and block layout from the container's own metadata, rebuilds the masks, and inverts each block."
-      command="audio-decrypt"
-      runLabel="Decrypt audio"
+      title="Decrypt audio"
+      description="Restores the waveform from your key. A wrong key gives noise."
+      runLabel="Decrypt"
       canRun={canRun}
-      blockedReason="Pick a .npz container and enter its passphrase"
+      blockedReason={blockedReason}
       isRunning={isRunning}
       hasResult={state.phase !== 'idle'}
       onRun={handleRun}
       onReset={reset}
+      command={cliCommand(
+        'phaseforge', 'audio-decrypt',
+        container?.name ?? 'cipher.wav', 'restored.wav',
+        ...keyCliArgs(key.options.keyMode, key.options.keyFile),
+      )}
       result={
         <ResultPanel
           state={state}
-          tone="audio"
-          idleHint="The recovered waveform appears here, ready to play back."
-          cliCommand={command}
+          idleHint="The restored audio appears here, ready to play."
+          note={
+            <p className="text-xs text-muted-foreground">
+              Loud static? The key is wrong.
+            </p>
+          }
         />
       }
     >
       <FileDropzone
-        label="Ciphertext container"
-        hint=".npz"
-        kind="container"
-        accept={ACCEPT_CONTAINER}
-        tone="audio"
+        label="Encrypted audio"
+        hint="the noisy cipher.wav"
+        kind="audio"
+        accept={ACCEPT_CIPHER_WAV}
         file={container}
-        onFileChange={setContainer}
+        onFileChange={onContainerChange}
         disabled={isRunning}
+        sample={SAMPLES.audioDecrypt}
+        onSampleLoaded={key.applySampleKey}
       />
-
-      <PassphraseField
-        value={passphrase}
-        onChange={setPassphrase}
-        hint="A wrong passphrase produces noise at full level. Turn the volume down first."
-        disabled={isRunning}
-      />
+      <KeySelector {...key.selectorProps} disabled={isRunning} />
     </OperationShell>
   )
 }

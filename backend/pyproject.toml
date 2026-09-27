@@ -9,17 +9,33 @@ description = "Fourier-domain image and audio security toolkit"
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=2.0",
-    "scipy>=1.14",
     "soundfile>=0.12",
     "pillow>=10.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+api = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+]
+dev = [
+    "phaseforge[api]",
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+phaseforge = "phaseforge.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["phaseforge*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-filterwarnings = ["error::RuntimeWarning"]
+filterwarnings = [
+    "error::RuntimeWarning",
+    # Third-party test-client deprecations, not ours to fix.
+    "ignore:Using `httpx` with `starlette.testclient`",
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated",
+]

@@ -64,11 +64,6 @@ def test_more_bits_preserve_more(image, encrypted):
     assert metrics.psnr(image, fine) > metrics.psnr(image, coarse)
 
 
-def test_clip_bounds_signal():
-    signal = np.linspace(-1, 1, 100)
-    assert np.max(np.abs(attacks.clip(signal, 0.5))) <= 0.5
-
-
 def test_robustness_report_covers_every_attack(image, encrypted):
     cipher, meta = encrypted
     report = attacks.robustness_report(image, cipher, PASSPHRASE, meta)
@@ -78,10 +73,10 @@ def test_robustness_report_covers_every_attack(image, encrypted):
     assert report["noise_20pct"]["psnr_db"] < report["noise_5pct"]["psnr_db"]
 
 
-def test_wrong_key_report_shows_no_recovery(image, encrypted):
+def test_wrong_key_shows_no_recovery(image, encrypted):
     cipher, meta = encrypted
-    report = attacks.wrong_key_report(image, cipher, meta, "not the passphrase")
-    assert abs(report["correlation"]) < 0.1
+    recovered = drpe.decrypt(cipher, "not the passphrase", meta)
+    assert abs(metrics.normalized_correlation(image, recovered)) < 0.1
 
 
 @pytest.fixture
@@ -100,10 +95,10 @@ def test_audio_robustness_report_uses_audio_metrics(audio):
     assert report["noise_20pct"]["snr_db"] < report["noise_5pct"]["snr_db"]
 
 
-def test_audio_wrong_key_report(audio):
+def test_audio_wrong_key_shows_no_recovery(audio):
     cipher, meta = audio_drpe.encrypt(audio, PASSPHRASE, 16000, iterations=FAST)
-    report = attacks.wrong_key_report(audio, cipher, meta, "not the passphrase")
-    assert abs(report["correlation"]) < 0.1
+    recovered = audio_drpe.decrypt(cipher, "not the passphrase", meta)
+    assert abs(metrics.normalized_correlation(audio, recovered)) < 0.1
 
 
 def test_chosen_plaintext_attack_breaks_the_scheme():

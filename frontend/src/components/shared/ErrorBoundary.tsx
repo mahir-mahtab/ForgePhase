@@ -36,10 +36,13 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children
 
     return (
-      <div className="flex flex-col items-start gap-4 rounded-lg border border-destructive/40 bg-destructive/5 p-6">
+      <div
+        role="alert"
+        className="flex flex-col items-start gap-4 rounded-lg border border-destructive/40 bg-destructive/5 p-6"
+      >
         <div className="flex items-center gap-2">
           <AlertTriangle className="size-5 text-destructive" aria-hidden />
-          <h2 className="text-base font-semibold">This workspace crashed</h2>
+          <h2 className="text-base font-semibold">Something went wrong here</h2>
         </div>
         <p className="text-sm text-muted-foreground">{error.message}</p>
         <Button type="button" variant="outline" onClick={this.handleReset}>

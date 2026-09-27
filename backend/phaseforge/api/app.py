@@ -12,13 +12,13 @@ Run it with::
 
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..audio import drpe as audio_drpe
-from ..core import framing, transform
+from ..core import framing
 from ..image import freq_edit
 from ..keys import derive
 from . import support
@@ -65,15 +65,14 @@ def create_app():
         """Defaults and limits, so the frontend need not hardcode them."""
         return {
             "version": __version__,
-            "transform": {
-                "backend": transform.get_backend(),
-                "available": list(transform.available_backends()),
-            },
             "limits": {
-                "max_upload_bytes": support.MAX_UPLOAD_BYTES,
                 "max_image_pixels": support.MAX_IMAGE_PIXELS,
+                "max_edit_pixels": support.MAX_EDIT_PIXELS,
                 "max_audio_samples": support.MAX_AUDIO_SAMPLES,
                 "max_audio_channels": support.MAX_AUDIO_CHANNELS,
+                "max_concurrent_jobs": support.MAX_CONCURRENT_JOBS,
+                "audio_block_size": [audio_drpe.MIN_BLOCK_SIZE, audio_drpe.MAX_BLOCK_SIZE],
+                "kdf_iterations": derive.MAX_ITERATIONS,
             },
             "defaults": {
                 "kdf_iterations": derive.DEFAULT_ITERATIONS,

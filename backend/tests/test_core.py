@@ -1,10 +1,9 @@
-"""Padding, framing, and the ciphertext container."""
+"""Padding and framing."""
 
 import numpy as np
 import pytest
 
 from phaseforge.core import framing, padding
-from phaseforge.io import container
 
 
 def test_next_power_of_two():
@@ -46,25 +45,3 @@ def test_hann_is_periodic():
     window = framing.hann(8)
     assert window[0] == 0.0
     assert np.isclose(window[4], 1.0)
-
-
-def test_container_round_trip(tmp_path):
-    rng = np.random.default_rng(2)
-    data = rng.normal(size=(2, 8, 8)) + 1j * rng.normal(size=(2, 8, 8))
-    metadata = {"kind": "image", "salt": b"\x00\x01\x02\x03", "iterations": 1000}
-
-    path = tmp_path / "cipher.npz"
-    container.save_container(path, data, metadata)
-    loaded, loaded_meta = container.load_container(path)
-
-    assert np.array_equal(loaded, data)
-    assert loaded.dtype == data.dtype
-    assert loaded_meta["salt"] == metadata["salt"]
-    assert loaded_meta["kind"] == "image"
-
-
-def test_container_rejects_foreign_npz(tmp_path):
-    path = tmp_path / "other.npz"
-    np.savez(path, something=np.zeros(4))
-    with pytest.raises(ValueError, match="not a PhaseForge container"):
-        container.load_container(path)

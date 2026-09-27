@@ -1,256 +1,181 @@
-/** Shared transport helpers for connected and placeholder operations. */
+/** Shared HTTP transport. The only module that talks to the network. */
 
 import type {
+  Artifact,
   ArtifactResult,
-  CipherPairResult,
+  BackendInfo,
+  Detail,
   OperationId,
   ServiceResult,
 } from '@/services/types'
 
 /** Same-origin by default; Vite proxies `/api` to the Python process. */
-export const API_BASE_URL: string =
+const API_BASE_URL: string = (
   import.meta.env.VITE_API_BASE_URL ?? '/api'
+).replace(/\/$/, '')
 
-/** Long enough to see a spinner, short enough not to feel broken. */
-const STUB_LATENCY_MS = 420
+const UNREACHABLE =
+  'Backend unreachable. Start it and try again.'
 
-/** Human-readable labels, kept out of the render path. */
-const OPERATION_LABELS = new Map<OperationId, string>([
-  ['image-encrypt', 'Image encryption'],
-  ['image-decrypt', 'Image decryption'],
-  ['watermark-embed', 'Watermark embedding'],
-  ['watermark-extract', 'Watermark extraction'],
-  ['filter', 'Frequency filtering'],
-  ['spectrum', 'Spectrum preview'],
-  ['audio-encrypt', 'Audio encryption'],
-  ['audio-decrypt', 'Audio decryption'],
-  ['denoise', 'Denoising'],
-  ['enhance', 'Speech enhancement'],
-  ['attack-report', 'Robustness report'],
-])
-
-export function operationLabel(operation: OperationId): string {
-  return OPERATION_LABELS.get(operation) ?? operation
-}
-
-/** Thrown when the caller aborts; distinguished from a backend failure. */
-export class AbortedError extends Error {
-  constructor() {
-    super('Operation cancelled')
-    this.name = 'AbortedError'
-  }
-}
-
-/**
- * Stand-in for a real request. Resolves with `not-implemented`.
- *
- * Honours `signal` so cancellation already works end to end, and the timer is
- * always cleared -- a pending timer would otherwise keep the callback alive
- * after the component that started it unmounted.
- */
-export function notImplemented<T>(
-  operation: OperationId,
-  signal?: AbortSignal,
-): Promise<ServiceResult<T>> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(new AbortedError())
-      return
-    }
-
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve({
-        status: 'not-implemented',
-        operation,
-        message: `${operationLabel(operation)} is not wired to a backend yet. The request shape is ready; only the transport is missing.`,
+/** FastAPI reports validation failures as a list of `{loc, msg}` objects. */
+function describeDetail(detail: unknown): string | null {
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item !== 'object' || item === null) return null
+        const { loc, msg } = item as { loc?: unknown; msg?: unknown }
+        const field = Array.isArray(loc) ? loc.filter((part) => part !== 'body').join('.') : ''
+        return typeof msg === 'string' ? (field ? `${field}: ${msg}` : msg) : null
       })
-    }, STUB_LATENCY_MS)
+      .filter(Boolean)
+    return parts.length > 0 ? parts.join('; ') : null
+  }
+  return null
+}
 
-    function onAbort() {
-      clearTimeout(timer)
-      reject(new AbortedError())
-    }
+async function errorMessage(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { detail?: unknown }
+    const message = describeDetail(body.detail)
+    if (message) return capitalize(message)
+  } catch {
+    // Not JSON: typically the dev proxy answering for a backend that is down.
+  }
+  if (response.status >= 500) return UNREACHABLE
+  return `Request failed (HTTP ${response.status}).`
+}
 
-    signal?.addEventListener('abort', onAbort, { once: true })
-  })
+function capitalize(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
 /**
- * POST a multipart form to a JSON endpoint.
+ * POST and return the raw response, or an error result.
  *
- * The endpoint path mirrors the CLI command name exactly.
+ * Aborts are re-thrown so the caller's cancellation logic sees them; every
+ * other failure becomes a value.
  */
-export async function postForm<T>(
+async function post(
   operation: OperationId,
-  body: FormData,
+  endpoint: string,
+  body: FormData | object,
   signal?: AbortSignal,
-  endpoint: string = operation,
-): Promise<ServiceResult<T>> {
-  const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
-    method: 'POST',
-    body,
-    signal,
-  })
+): Promise<Response | ServiceResult<never>> {
+  const init: RequestInit =
+    body instanceof FormData
+      ? { method: 'POST', body, signal }
+      : {
+          method: 'POST',
+          body: JSON.stringify(body),
+          headers: { 'Content-Type': 'application/json' },
+          signal,
+        }
+
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}/${endpoint}`, init)
+  } catch (error) {
+    if (signal?.aborted) throw error
+    return { status: 'error', operation, message: UNREACHABLE }
+  }
 
   if (!response.ok) {
-    return {
-      status: 'error',
-      operation,
-      message: `${operationLabel(operation)} failed (HTTP ${response.status}).`,
+    return { status: 'error', operation, message: await errorMessage(response) }
+  }
+  return response
+}
+
+/** Build multipart form data from plain fields. */
+export function form(fields: Record<string, string | Blob | undefined | null>): FormData {
+  const body = new FormData()
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined && value !== null) {
+      body.set(key, value)
     }
   }
-
-  return { status: 'ok', data: (await response.json()) as T }
+  return body
 }
 
 function responseFilename(response: Response, fallback: string): string {
   const disposition = response.headers.get('Content-Disposition')
   const encoded = disposition?.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
   if (encoded) return decodeURIComponent(encoded.replace(/^"|"$/g, ''))
-
   return disposition?.match(/filename="?([^";]+)"?/i)?.[1] ?? fallback
 }
 
-async function errorMessage(response: Response): Promise<string> {
-  const fallback = `Request failed (HTTP ${response.status}).`
-
-  try {
-    const body = (await response.json()) as { detail?: unknown }
-    return typeof body.detail === 'string' ? body.detail : fallback
-  } catch {
-    return fallback
+export function artifactFromFile(file: File): Artifact {
+  return {
+    file,
+    name: file.name,
+    mimeType: file.type || 'application/octet-stream',
+    byteLength: file.size,
   }
 }
 
-/** POST multipart form data and expose a binary response as a download. */
+/** POST multipart form data and return the binary response as a file. */
 export async function postArtifact(
   operation: OperationId,
   endpoint: string,
   body: FormData,
   fallbackName: string,
-  details: ArtifactResult['details'],
+  details: Detail[],
   signal?: AbortSignal,
 ): Promise<ServiceResult<ArtifactResult>> {
-  const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
-    method: 'POST',
-    body,
-    signal,
-  })
-
-  if (!response.ok) {
-    return {
-      status: 'error',
-      operation,
-      message: await errorMessage(response),
-    }
-  }
+  const response = await post(operation, endpoint, body, signal)
+  if (!(response instanceof Response)) return response
 
   const blob = await response.blob()
-  return {
-    status: 'ok',
-    data: {
-      artifact: {
-        name: responseFilename(response, fallbackName),
-        mimeType: blob.type || 'application/octet-stream',
-        byteLength: blob.size,
-        url: URL.createObjectURL(blob),
-      },
-      details,
-    },
-  }
+  const name = responseFilename(response, fallbackName)
+  const file = new File([blob], name, { type: blob.type || 'application/octet-stream' })
+  return { status: 'ok', data: { artifact: artifactFromFile(file), details } }
 }
 
-/** POST an image encryption request and unpack its two-file ZIP response. */
-export async function postCipherPair(
+/** POST and parse a JSON response through `parse`, which may throw. */
+export async function postJson<T>(
   operation: OperationId,
   endpoint: string,
-  body: FormData,
-  details: CipherPairResult['details'],
+  body: FormData | object,
+  parse: (raw: unknown) => T,
   signal?: AbortSignal,
-): Promise<ServiceResult<CipherPairResult>> {
-  const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
-    method: 'POST',
-    body,
-    signal,
-  })
+): Promise<ServiceResult<T>> {
+  const response = await post(operation, endpoint, body, signal)
+  if (!(response instanceof Response)) return response
 
-  if (!response.ok) {
+  try {
+    return { status: 'ok', data: parse(await response.json()) }
+  } catch (error) {
+    if (signal?.aborted) throw error
     return {
       status: 'error',
       operation,
-      message: await errorMessage(response),
+      message: error instanceof Error ? error.message : 'The backend sent an unreadable reply.',
     }
   }
+}
 
-  const bundle = await response.blob()
+/** `GET /api/info`, or null when the backend is not answering. */
+export async function fetchBackendInfo(signal?: AbortSignal): Promise<BackendInfo | null> {
   try {
-    const files = await unzipPair(bundle)
-    const real = files.get('cipher-real.png')
-    const imaginary = files.get('cipher-imaginary.png')
-    if (!real || !imaginary) throw new Error('cipher pair is missing a component')
-
+    const response = await fetch(`${API_BASE_URL}/info`, { signal })
+    if (!response.ok) return null
+    const body = (await response.json()) as {
+      version: string
+      limits: {
+        max_image_pixels: number
+        max_audio_samples: number
+        max_audio_channels: number
+      }
+    }
     return {
-      status: 'ok',
-      data: {
-        real: artifactFromFile(real),
-        imaginary: artifactFromFile(imaginary),
-        bundle: {
-          name: responseFilename(response, 'cipher-pair.zip'),
-          mimeType: bundle.type || 'application/zip',
-          byteLength: bundle.size,
-          url: URL.createObjectURL(bundle),
-        },
-        details,
+      version: body.version,
+      limits: {
+        maxImagePixels: body.limits.max_image_pixels,
+        maxAudioSamples: body.limits.max_audio_samples,
+        maxAudioChannels: body.limits.max_audio_channels,
       },
     }
-  } catch (error) {
-    return {
-      status: 'error',
-      operation,
-      message: error instanceof Error ? error.message : 'Could not unpack cipher pair.',
-    }
+  } catch {
+    return null
   }
-}
-
-function artifactFromFile(file: File): CipherPairResult['real'] {
-  return {
-    name: file.name,
-    mimeType: file.type || 'image/png',
-    byteLength: file.size,
-    url: URL.createObjectURL(file),
-  }
-}
-
-/** Minimal ZIP reader for the two deterministic PNG entries returned by the API. */
-async function unzipPair(blob: Blob): Promise<Map<string, File>> {
-  const bytes = new Uint8Array(await blob.arrayBuffer())
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  const files = new Map<string, File>()
-  let offset = 0
-  while (offset + 30 <= view.byteLength && view.getUint32(offset, true) === 0x04034b50) {
-    const method = view.getUint16(offset + 8, true)
-    const compressedSize = view.getUint32(offset + 18, true)
-    const nameLength = view.getUint16(offset + 26, true)
-    const extraLength = view.getUint16(offset + 28, true)
-    const nameStart = offset + 30
-    const name = new TextDecoder().decode(bytes.subarray(nameStart, nameStart + nameLength))
-    const dataStart = nameStart + nameLength + extraLength
-    const compressed = bytes.subarray(dataStart, dataStart + compressedSize)
-    let data: Uint8Array
-    if (method === 0) {
-      data = compressed
-    } else if (method === 8) {
-      const compressedCopy = compressed.slice()
-      const stream = new Blob([compressedCopy]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
-      data = new Uint8Array(await new Response(stream).arrayBuffer())
-    } else {
-      throw new Error(`Unsupported ZIP compression method ${method}.`)
-    }
-    const dataCopy = data.slice()
-    files.set(name, new File([dataCopy], name, { type: 'image/png' }))
-    offset = dataStart + compressedSize
-  }
-  if (files.size === 0) throw new Error('The API returned an invalid cipher ZIP.')
-  return files
 }

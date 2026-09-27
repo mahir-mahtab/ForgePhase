@@ -34,12 +34,11 @@ def run(*argv):
 
 
 def test_image_encrypt_decrypt_round_trip(tmp_path, image_file):
-    real = tmp_path / "cipher-real.png"
-    imaginary = tmp_path / "cipher-imaginary.png"
+    cipher = tmp_path / "cipher.png"
     restored = tmp_path / "restored.png"
 
-    run("image-encrypt", image_file, real, imaginary, "--passphrase", PASSPHRASE)
-    run("image-decrypt", real, imaginary, restored, "--passphrase", PASSPHRASE)
+    run("image-encrypt", image_file, cipher, "--passphrase", PASSPHRASE)
+    run("image-decrypt", cipher, restored, "--passphrase", PASSPHRASE)
 
     original, _ = image_io.load_image(image_file)
     recovered, _ = image_io.load_image(restored)
@@ -47,12 +46,11 @@ def test_image_encrypt_decrypt_round_trip(tmp_path, image_file):
 
 
 def test_image_decrypt_with_wrong_passphrase_yields_noise(tmp_path, image_file):
-    real = tmp_path / "cipher-real.png"
-    imaginary = tmp_path / "cipher-imaginary.png"
+    cipher = tmp_path / "cipher.png"
     wrong = tmp_path / "wrong.png"
 
-    run("image-encrypt", image_file, real, imaginary, "--passphrase", PASSPHRASE)
-    run("image-decrypt", real, imaginary, wrong, "--passphrase", "not the passphrase")
+    run("image-encrypt", image_file, cipher, "--passphrase", PASSPHRASE)
+    run("image-decrypt", cipher, wrong, "--passphrase", "not the passphrase")
 
     original, _ = image_io.load_image(image_file)
     recovered, _ = image_io.load_image(wrong)
@@ -60,7 +58,7 @@ def test_image_decrypt_with_wrong_passphrase_yields_noise(tmp_path, image_file):
 
 
 def test_audio_encrypt_decrypt_round_trip(tmp_path, audio_file):
-    cipher = tmp_path / "cipher.npz"
+    cipher = tmp_path / "cipher.wav"
     restored = tmp_path / "restored.wav"
 
     run("audio-encrypt", audio_file, cipher, "--passphrase", PASSPHRASE)
@@ -73,19 +71,34 @@ def test_audio_encrypt_decrypt_round_trip(tmp_path, audio_file):
 
 
 def test_watermark_embed_and_extract(tmp_path, image_file):
-    mark = np.zeros((16, 16))
+    mark = np.zeros((16, 16))  # a quarter of the 64 x 64 image: no resizing
     mark[4:12, 4:12] = 1.0
     mark_file = tmp_path / "mark.png"
     image_io.save_image(mark_file, mark[None, :, :])
 
     marked = tmp_path / "marked.png"
     extracted = tmp_path / "extracted.png"
-    run("watermark-embed", image_file, mark_file, marked, "--strength", 0.3)
-    run("watermark-extract", image_file, marked, extracted,
-        "--height", 16, "--width", 16, "--strength", 0.3)
+    run("watermark-embed", image_file, mark_file, marked)
+    run("watermark-extract", image_file, marked, extracted)
 
     recovered, _ = image_io.load_image(extracted, greyscale=True)
     assert metrics.normalized_correlation(mark, recovered[0]) > 0.9
+
+
+def test_audio_watermark_embed_and_extract(tmp_path, audio_file):
+    t = np.arange(1500) / 16000
+    clip = (0.6 * np.sin(2 * np.pi * 500 * t))[None, :]
+    clip_file = tmp_path / "clip.wav"
+    audio_io.save_audio(clip_file, clip, 16000)
+
+    marked = tmp_path / "marked.wav"
+    extracted = tmp_path / "extracted.wav"
+    run("audio-watermark-embed", audio_file, clip_file, marked)
+    run("audio-watermark-extract", audio_file, marked, extracted)
+
+    recovered, _ = audio_io.load_audio(extracted)
+    n = min(recovered.shape[-1], clip.shape[-1])
+    assert metrics.normalized_correlation(clip[0, :n], recovered[0, :n]) > 0.99
 
 
 @pytest.mark.parametrize("kind", ["low", "high"])
@@ -102,24 +115,6 @@ def test_band_pass_runs(tmp_path, image_file):
     assert output.exists()
 
 
-def test_spectrum_of_image(tmp_path, image_file):
-    output = tmp_path / "spectrum.png"
-    run("spectrum", image_file, output)
-    assert output.exists()
-
-
-def test_spectrum_of_ciphertext_looks_like_noise(tmp_path, image_file):
-    real = tmp_path / "cipher-real.png"
-    imaginary = tmp_path / "cipher-imaginary.png"
-    preview = tmp_path / "preview.png"
-    run("image-encrypt", image_file, real, imaginary, "--passphrase", PASSPHRASE)
-    run("spectrum", real, preview, "--imaginary", imaginary)
-
-    original, _ = image_io.load_image(image_file)
-    rendered, _ = image_io.load_image(preview)
-    assert abs(metrics.normalized_correlation(original, rendered)) < 0.2
-
-
 def test_denoise_and_enhance(tmp_path, audio_file):
     denoised = tmp_path / "denoised.wav"
     enhanced = tmp_path / "enhanced.wav"
@@ -129,18 +124,16 @@ def test_denoise_and_enhance(tmp_path, audio_file):
 
 
 def test_attack_report(tmp_path, image_file, capsys):
-    real = tmp_path / "cipher-real.png"
-    imaginary = tmp_path / "cipher-imaginary.png"
-    run("image-encrypt", image_file, real, imaginary, "--passphrase", PASSPHRASE)
+    cipher = tmp_path / "cipher.png"
+    run("image-encrypt", image_file, cipher, "--passphrase", PASSPHRASE)
     capsys.readouterr()
 
-    run("attack-report", real, image_file, "--imaginary", imaginary,
-        "--passphrase", PASSPHRASE)
+    run("attack-report", cipher, image_file, "--passphrase", PASSPHRASE)
     assert "noise_5pct" in capsys.readouterr().out
 
 
 def test_attack_report_on_audio(tmp_path, audio_file, capsys):
-    cipher = tmp_path / "audio_cipher.npz"
+    cipher = tmp_path / "audio_cipher.wav"
     run("audio-encrypt", audio_file, cipher, "--passphrase", PASSPHRASE)
     capsys.readouterr()
 
@@ -148,14 +141,51 @@ def test_attack_report_on_audio(tmp_path, audio_file, capsys):
     assert "snr_db" in capsys.readouterr().out
 
 
-def test_kpa_demo(capsys):
-    run("kpa-demo", "--size", 32)
+def test_key_reuse_demo(capsys):
+    run("key-reuse-demo", "--size", 32)
     assert "Chosen-plaintext attack" in capsys.readouterr().out
 
 
-def test_backend_flag_is_honoured(tmp_path, image_file):
-    real = tmp_path / "cipher-real.png"
-    imaginary = tmp_path / "cipher-imaginary.png"
-    run("--backend", "numpy", "image-encrypt", image_file, real, imaginary,
-        "--passphrase", PASSPHRASE)
-    assert real.exists() and imaginary.exists()
+def test_cli_image_encrypt_decrypt_with_key_image(tmp_path, image_file):
+    key_file = tmp_path / "key.png"
+    image_io.save_image(key_file, np.random.default_rng(1).random((1, 16, 16)))
+    cipher = tmp_path / "cipher.png"
+    restored = tmp_path / "restored.png"
+
+    run("image-encrypt", image_file, cipher, "--key-image", key_file)
+    run("image-decrypt", cipher, restored, "--key-image", key_file)
+
+    original, _ = image_io.load_image(image_file)
+    recovered, _ = image_io.load_image(restored)
+    assert metrics.psnr(original, recovered) > 40
+
+
+def test_cli_audio_encrypt_decrypt_with_key_audio(tmp_path, audio_file):
+    key_file = tmp_path / "key.wav"
+    t = np.linspace(0, 0.2, 3200, endpoint=False)
+    audio_io.save_audio(key_file, (0.5 * np.sin(2 * np.pi * 440 * t))[None, :], 16000)
+    cipher = tmp_path / "cipher.wav"
+    restored = tmp_path / "restored.wav"
+
+    run("audio-encrypt", audio_file, cipher, "--key-audio", key_file)
+    run("audio-decrypt", cipher, restored, "--key-audio", key_file)
+
+    original, sr1 = audio_io.load_audio(audio_file)
+    recovered, sr2 = audio_io.load_audio(restored)
+    assert recovered.shape == original.shape
+    assert metrics.snr(original, recovered) > 30
+
+
+
+def test_cli_rejects_unsupported_key_image(tmp_path, image_file, capsys):
+    from PIL import Image
+    key_file = tmp_path / "key.webp"
+    Image.fromarray(np.full((16, 16, 3), 128, np.uint8)).save(key_file)
+    argv = ["image-encrypt", image_file, tmp_path / "cipher.png", "--key-image", key_file]
+    assert cli.main([str(a) for a in argv]) != 0
+    assert "PNG, JPEG, BMP or TIFF" in capsys.readouterr().err
+
+
+def test_old_key_reuse_demo_name_still_works(capsys):
+    run("kpa-demo", "--size", 32)
+    assert "Chosen-plaintext attack" in capsys.readouterr().out

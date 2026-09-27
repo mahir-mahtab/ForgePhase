@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react'
+import { memo, useId, useMemo } from 'react'
 
 import {
   MAX_RADIUS,
@@ -28,7 +28,6 @@ const TOTAL_HEIGHT = PLATE + GAP + PROFILE_HEIGHT
 
 interface FrequencyPlaneProps {
   params: MaskParams
-  tone: 'image' | 'audio'
   /** Turns off the ring field, leaving the bare plate and its graticule. */
   quiet?: boolean
 }
@@ -42,8 +41,13 @@ interface FrequencyPlaneProps {
  * stacking translucent filled circles would composite each gain on top of the
  * ones outside it and read wrong.
  */
-function FrequencyPlaneImpl({ params, tone, quiet = false }: FrequencyPlaneProps) {
-  const color = tone === 'image' ? 'var(--ch-image)' : 'var(--ch-audio)'
+const COLOR = 'var(--primary)'
+
+function FrequencyPlaneImpl({ params, quiet = false }: FrequencyPlaneProps) {
+  const color = COLOR
+
+  // Unique per instance: duplicate ids would make every plot clip to the first.
+  const clipId = useId()
 
   const rings = useMemo(() => {
     if (quiet) return []
@@ -83,14 +87,14 @@ function FrequencyPlaneImpl({ params, tone, quiet = false }: FrequencyPlaneProps
       aria-label={`${params.kind}-pass ${params.shape} mask, cutoff ${params.cutoff}`}
     >
       <defs>
-        <clipPath id="plate-clip">
+        <clipPath id={clipId}>
           <rect width={PLATE} height={PLATE} />
         </clipPath>
       </defs>
 
       <rect width={PLATE} height={PLATE} fill="var(--plate)" />
 
-      <g clipPath="url(#plate-clip)">
+      <g clipPath={`url(#${clipId})`}>
         {rings.map((ring) => (
           <circle
             key={ring.r}

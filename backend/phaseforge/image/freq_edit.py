@@ -1,9 +1,7 @@
 """Interactive frequency-domain image editing.
 
 Builds low-, high-, and band-pass masks over the 2D spectrum, applies them, and
-reconstructs. Also renders the spectrum itself for display -- a raw complex
-spectrum cannot go into an ``<img>`` tag, so the frontend gets a log-scaled
-magnitude image instead.
+reconstructs.
 
 Cutoffs are given as fractions of the Nyquist limit (0 = DC, 1 = the corner of
 the spectrum), so a UI slider maps onto them directly without knowing the image
@@ -37,6 +35,10 @@ def build_mask(shape, kind="low", cutoff=0.3, high_cutoff=None, filter_shape="ga
         raise ValueError(f"filter_shape must be one of {FILTER_SHAPES}, got {filter_shape!r}")
     if not 0 < cutoff <= np.sqrt(2):
         raise ValueError(f"cutoff must be in (0, sqrt(2)], got {cutoff}")
+    if filter_shape == "butterworth" and (
+            isinstance(order, bool) or not isinstance(order, (int, np.integer))
+            or not 1 <= order <= 20):
+        raise ValueError(f"order must be an integer in [1, 20], got {order!r}")
 
     distance = radial_distance(shape)
 
@@ -52,8 +54,10 @@ def build_mask(shape, kind="low", cutoff=0.3, high_cutoff=None, filter_shape="ga
     if kind == "high":
         return 1.0 - low_pass(cutoff)
     if kind == "band":
-        if high_cutoff is None or high_cutoff <= cutoff:
+        if high_cutoff is None or not high_cutoff > cutoff:
             raise ValueError("band-pass needs high_cutoff greater than cutoff")
+        if not high_cutoff <= np.sqrt(2):
+            raise ValueError(f"high_cutoff must be at most sqrt(2), got {high_cutoff}")
         return low_pass(high_cutoff) - low_pass(cutoff)
     raise ValueError(f"kind must be 'low', 'high' or 'band', got {kind!r}")
 
@@ -68,22 +72,3 @@ def apply_filter(image, kind="low", cutoff=0.3, high_cutoff=None, filter_shape="
     filtered = transform.ifftshift(spectrum * mask, axes=(-2, -1))
     return np.real(transform.ifft2(filtered))
 
-
-def spectrum_preview(data, gamma=1.0):
-    """Log-scaled, ``[0, 1]``-normalized magnitude spectrum for display.
-
-    Accepts an image (real) or a ciphertext (complex); a complex input is
-    treated as already being a spectrum-domain signal to visualize.
-    """
-    data = np.asarray(data)
-    if data.ndim == 2:
-        data = data[None, :, :]
-
-    spectrum = data if np.iscomplexobj(data) else transform.fft2(data)
-    magnitude = np.abs(transform.fftshift(spectrum, axes=(-2, -1)))
-
-    scaled = np.log1p(magnitude)
-    peak = scaled.max()
-    if peak < 1e-12:
-        return np.zeros_like(scaled)
-    return (scaled / peak) ** gamma

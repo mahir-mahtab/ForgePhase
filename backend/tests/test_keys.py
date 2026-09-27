@@ -74,3 +74,35 @@ def test_unicode_passphrases_work(passphrase):
     a = derive.derive_masks(passphrase, salt, (8, 8), iterations=FAST)[0]
     b = derive.derive_masks(passphrase, salt, (8, 8), iterations=FAST)[0]
     assert np.array_equal(a, b)
+
+
+def test_numpy_array_key_reproduces_masks():
+    salt = b"fixed-salt-16byt"
+    key_arr = np.random.default_rng(42).random((3, 32, 32))
+    a = derive.derive_masks(key_arr, salt, (16, 16), iterations=FAST)
+    b = derive.derive_masks(key_arr.copy(), salt, (16, 16), iterations=FAST)
+    for mask_a, mask_b in zip(a, b):
+        assert np.array_equal(mask_a, mask_b)
+
+
+def test_different_numpy_array_gives_different_masks():
+    salt = b"fixed-salt-16byt"
+    key1 = np.ones((2, 100))
+    key2 = np.ones((2, 100))
+    key2[0, 0] = 1.0001
+    a = derive.derive_masks(key1, salt, (16, 16), iterations=FAST)[0]
+    b = derive.derive_masks(key2, salt, (16, 16), iterations=FAST)[0]
+    assert not np.allclose(a, b)
+
+
+def test_numpy_array_invalid_rejected():
+    salt = b"fixed-salt-16byt"
+    with pytest.raises(ValueError, match="non-finite"):
+        derive.derive_key(np.array([1.0, float("nan")]), salt, FAST)
+
+    with pytest.raises(ValueError, match="empty"):
+        derive.derive_key(np.array([]), salt, FAST)
+
+    with pytest.raises(TypeError):
+        derive.derive_key(12345, salt, FAST)
+

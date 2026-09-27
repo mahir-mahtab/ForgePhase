@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react'
  * StrictMode double-invoke, or leave a revoked URL behind when the effect
  * remounts in development.
  */
-export function useObjectUrl(file: File | null): string | null {
+export function useObjectUrl(file: Blob | null): string | null {
   const [url, setUrl] = useState<string | null>(null)
 
   useEffect(() => {

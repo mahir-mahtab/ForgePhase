@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { AbortedError } from '@/services/client'
 import type { ServiceResult } from '@/services/types'
 
 import { useLatest } from '@/hooks/useLatest'
@@ -9,7 +8,6 @@ export type OperationState<T> =
   | { phase: 'idle' }
   | { phase: 'running' }
   | { phase: 'ok'; data: T }
-  | { phase: 'not-implemented'; message: string }
   | { phase: 'error'; message: string }
 
 const IDLE = { phase: 'idle' } as const
@@ -40,7 +38,7 @@ export function useOperation<TRequest extends { signal?: AbortSignal }, TRespons
   )
 
   const execute = useCallback(
-    async (request: Omit<TRequest, "signal">) => {
+    async (request: Omit<TRequest, 'signal'>) => {
       controllerRef.current?.abort()
 
       const controller = new AbortController()
@@ -53,31 +51,24 @@ export function useOperation<TRequest extends { signal?: AbortSignal }, TRespons
           signal: controller.signal,
         } as TRequest)
 
-        // A newer call already took over; its result is the one that counts.
+        // A newer call (or a cancel) already took over.
         if (controller.signal.aborted) return
 
         setState(
           result.status === 'ok'
             ? { phase: 'ok', data: result.data }
-            : { phase: result.status, message: result.message },
+            : { phase: 'error', message: result.message },
         )
       } catch (error) {
-        if (error instanceof AbortedError || controller.signal.aborted) return
+        if (controller.signal.aborted) return
         setState({
           phase: 'error',
-          message:
-            error instanceof Error ? error.message : 'Something went wrong.',
+          message: error instanceof Error ? error.message : 'Something went wrong.',
         })
       }
     },
     [runRef],
   )
-
-  const cancel = useCallback(() => {
-    controllerRef.current?.abort()
-    controllerRef.current = null
-    setState(IDLE)
-  }, [])
 
   const reset = useCallback(() => {
     controllerRef.current?.abort()
@@ -85,5 +76,5 @@ export function useOperation<TRequest extends { signal?: AbortSignal }, TRespons
     setState(IDLE)
   }, [])
 
-  return { state, execute, cancel, reset }
+  return { state, execute, reset }
 }

@@ -1,7 +1,6 @@
 """Image and audio file handling."""
 
 import numpy as np
-import pytest
 
 from phaseforge.io import audio_io, image_io
 
@@ -106,6 +105,16 @@ def test_save_accepts_bare_1d_audio(tmp_path):
     assert loaded.shape == (1, 400)
 
 
-def test_to_mono_averages_channels():
-    stereo = np.array([[1.0, 0.0], [0.0, 1.0]])
-    assert np.allclose(audio_io.to_mono(stereo), [0.5, 0.5])
+def test_transparent_pixels_load_as_white(tmp_path):
+    from PIL import Image
+
+    # Transparent black around an opaque red square: dropping alpha would
+    # leave the border black and barely distinguishable from the red.
+    pixels = np.zeros((8, 8, 4), dtype=np.uint8)
+    pixels[2:6, 2:6] = (200, 0, 0, 255)
+    path = tmp_path / "logo.png"
+    Image.fromarray(pixels, mode="RGBA").save(path)
+
+    grey, _ = image_io.load_image(path, greyscale=True)
+    assert grey[0, 0, 0] == 1.0
+    assert grey[0, 3, 3] < 0.3
